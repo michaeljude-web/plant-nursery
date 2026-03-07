@@ -1,0 +1,13 @@
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+logs/
+.env
+uploads/
+uploads/*
+cache/
+tmp/
+node_modules/
+index.php
