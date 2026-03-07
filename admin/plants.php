@@ -43,7 +43,7 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Plants — PlantSystem</title>
+<title>Plants</title>
 <link rel="stylesheet" href="/plant/assets/vendor/bootstrap-5/css/bootstrap.min.css">
 <link rel="stylesheet" href="/plant/assets/vendor/fontawesome-7/css/all.min.css">
 </head>
