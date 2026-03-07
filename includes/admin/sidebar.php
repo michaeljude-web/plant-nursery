@@ -86,7 +86,7 @@
     <i class="fas fa-leaf me-2 text-success"></i>Ej's Plant Nursery
   </div>
   <ul class="nav flex-column mt-1">
-    <li><a href="/plant/admin/index.php" class="nav-link <?= basename($_SERVER['PHP_SELF'])=='index.php'?'active':'' ?>"><i class="fas fa-gauge-high"></i> Dashboard</a></li>
+    <li><a href="/plant/admin/dashboard.php" class="nav-link <?= basename($_SERVER['PHP_SELF'])=='dashboard.php'?'active':'' ?>"><i class="fas fa-gauge-high"></i> Dashboard</a></li>
     <li><a href="/plant/admin/staff.php" class="nav-link <?= basename($_SERVER['PHP_SELF'])=='staff.php'?'active':'' ?>"><i class="fas fa-users"></i> Staff</a></li>
     <li><a href="/plant/admin/plants.php" class="nav-link <?= basename($_SERVER['PHP_SELF'])=='plants.php'?'active':'' ?>"><i class="fas fa-seedling"></i> Plants</a></li>
     <li><a href="/plant/admin/inventory.php" class="nav-link <?= basename($_SERVER['PHP_SELF'])=='inventory.php'?'active':'' ?>"><i class="fas fa-boxes-stacked"></i> Inventory</a></li>
