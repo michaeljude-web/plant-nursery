@@ -75,3 +75,29 @@ CREATE TABLE damage_photos (
     photo_path VARCHAR(255) NOT NULL,
     FOREIGN KEY (report_id) REFERENCES damage_reports(report_id)
 );
+
+CREATE TABLE customer_info (
+    customer_id INT AUTO_INCREMENT PRIMARY KEY,
+    firstname VARCHAR(100) NOT NULL,
+    lastname VARCHAR(100) NOT NULL,
+    address TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE orders (
+    order_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT NOT NULL,
+    staff_id INT NOT NULL,
+    ordered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customer_info(customer_id),
+    FOREIGN KEY (staff_id) REFERENCES staff_info(staff_id)
+);
+
+CREATE TABLE order_items (
+    item_id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT NOT NULL,
+    variety_id INT NOT NULL,
+    quantity INT NOT NULL,
+    FOREIGN KEY (order_id) REFERENCES orders(order_id),
+    FOREIGN KEY (variety_id) REFERENCES varieties(variety_id)
+);
