@@ -83,7 +83,7 @@
 
 <div id="sidebar">
   <div class="brand">
-    <i class="fas fa-leaf me-2 text-success"></i>PlantSystem
+    <i class="fas fa-leaf me-2 text-success"></i>Ej's Plant Nursery
   </div>
   <ul class="nav flex-column mt-1">
     <li><a href="/plant/admin/index.php" class="nav-link <?= basename($_SERVER['PHP_SELF'])=='index.php'?'active':'' ?>"><i class="fas fa-gauge-high"></i> Dashboard</a></li>

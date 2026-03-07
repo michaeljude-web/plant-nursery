@@ -10,17 +10,11 @@ require_admin_auth();
 <title>Dashboard</title>
 <link rel="stylesheet" href="/plant/assets/vendor/bootstrap-5/css/bootstrap.min.css">
 <link rel="stylesheet" href="/plant/assets/vendor/fontawesome-7/css/all.min.css">
-<style>
-  body { overflow-x:hidden; background:#f5f6fa; }
-  .stat-card { background:#fff; border:1px solid #e9ecef; border-radius:10px; padding:20px 22px; }
-  .stat-card .label { font-size:.82rem; color:#999; text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; }
-  .stat-card .value { font-size:1.75rem; font-weight:700; color:#111; }
-  .stat-card .icon { font-size:1.1rem; color:#bbb; }
-</style>
+<link rel="stylesheet" href="../assets/css/admin/style.css">
 </head>
 <body>
 
-<?php include __DIR__ . '/../includes/admin/sidebar.php'; ?>
+<?php require_once __DIR__ . '/../includes/admin/sidebar.php'; ?>
 
 <div id="content">
   <div id="topbar">
