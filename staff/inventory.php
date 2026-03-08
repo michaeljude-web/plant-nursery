@@ -31,7 +31,7 @@ $inventory = $pdo->query("
   <?php else: ?>
   <div class="d-flex justify-content-end gap-4 mb-3">
     <span class="text-muted small">Total Varieties: <strong><?= count($inventory) ?></strong></span>
-    <span class="text-muted small">Total Seedlings: <strong><?= array_sum(array_column($inventory, 'quantity')) ?></strong></span>
+    <span class="text-muted small">Total Seedlings: <strong><?= count(array_unique(array_column($inventory, 'seedling_name'))) ?></strong></span>
   </div>
   <div class="row g-3">
     <?php foreach ($inventory as $item): ?>
