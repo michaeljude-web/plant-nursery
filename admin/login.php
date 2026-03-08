@@ -84,7 +84,7 @@ $timeout    = isset($_GET['timeout']);
             </form>
          </div>
       </div>
-      <script src="/plant/assets/vendor/bootstrap-4/js/bootstrap.bundle.min.js"></script>
+      <script src="/plant/assets/vendor/bootstrap-5/js/bootstrap.bundle.min.js"></script>
       <script src="/plant/assets/js/admin/login.js"></script>
    </body>
 </html>
