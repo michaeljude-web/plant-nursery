@@ -19,13 +19,13 @@ CREATE TABLE seedlings (
     seedling_id INT AUTO_INCREMENT PRIMARY KEY,
     seedling_name VARCHAR(100) NOT NULL
 );
+
 CREATE TABLE varieties (
     variety_id INT AUTO_INCREMENT PRIMARY KEY,
     seedling_id INT NOT NULL,
     variety_name VARCHAR(100) NOT NULL,
     FOREIGN KEY (seedling_id) REFERENCES seedlings(seedling_id)
 );
-
 
 CREATE TABLE plots (
     plot_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -42,10 +42,12 @@ CREATE TABLE plot_seedlings (
     plot_seedling_id INT AUTO_INCREMENT PRIMARY KEY,
     plot_id INT NOT NULL,
     variety_id INT NOT NULL,
+    staff_id INT NOT NULL,
     quantity INT NOT NULL DEFAULT 0,
     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (plot_id) REFERENCES plots(plot_id),
-    FOREIGN KEY (variety_id) REFERENCES varieties(variety_id)
+    FOREIGN KEY (variety_id) REFERENCES varieties(variety_id),
+    FOREIGN KEY (staff_id) REFERENCES staff_info(staff_id)
 );
 
 CREATE TABLE inventory (
@@ -53,6 +55,16 @@ CREATE TABLE inventory (
     variety_id INT NOT NULL,
     quantity INT NOT NULL DEFAULT 0,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (variety_id) REFERENCES varieties(variety_id)
+);
+
+CREATE TABLE inventory_logs (
+    log_id INT AUTO_INCREMENT PRIMARY KEY,
+    staff_id INT NOT NULL,
+    variety_id INT NOT NULL,
+    quantity INT NOT NULL,
+    logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (staff_id) REFERENCES staff_info(staff_id),
     FOREIGN KEY (variety_id) REFERENCES varieties(variety_id)
 );
 
