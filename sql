@@ -33,6 +33,7 @@ CREATE TABLE plots (
     plot_name VARCHAR(50) NOT NULL
 );
 
+-- 15 Plot --
 INSERT INTO plots (plot_number, plot_name) VALUES
 (1,'Plot 1'),(2,'Plot 2'),(3,'Plot 3'),(4,'Plot 4'),(5,'Plot 5'),
 (6,'Plot 6'),(7,'Plot 7'),(8,'Plot 8'),(9,'Plot 9'),(10,'Plot 10'),
