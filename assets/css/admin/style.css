@@ -1,1 +1,49 @@
-body { overflow-x:hidden; background:#f5f6fa; }
+ body { overflow-x:hidden; background:#f5f6fa; }
+.dashboard-stat-card {
+    border-left: 3px solid transparent;
+    transition: transform .15s;
+  }
+  .dashboard-stat-card:hover { transform: translateY(-2px); }
+  .dashboard-stat-card.green  { border-left-color: #198754; }
+  .dashboard-stat-card.blue   { border-left-color: #0d6efd; }
+  .dashboard-stat-card.orange { border-left-color: #fd7e14; }
+  .dashboard-stat-card.teal   { border-left-color: #20c997; }
+  .dashboard-stat-card.red    { border-left-color: #dc3545; }
+  .dashboard-stat-icon {
+    width: 38px; height: 38px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .95rem;
+    flex-shrink: 0;
+  }
+  .dashboard-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+  }
+  .dashboard-cal-header {
+    text-align: center;
+    font-size: .7rem;
+    font-weight: 700;
+    padding: 5px 0;
+  }
+  .dashboard-cal-header.sun { color: #dc3545; }
+  .dashboard-cal-header.sat { color: #0d6efd; }
+  .dashboard-cal-header.weekday { color: #888; }
+  .dashboard-cal-day {
+    text-align: center;
+    font-size: .8rem;
+    padding: 6px 2px;
+    border-radius: 6px;
+    cursor: default;
+    line-height: 1;
+  }
+  .dashboard-cal-day.today {
+    background: #198754;
+    color: #fff;
+    font-weight: 700;
+  }
+  .dashboard-cal-day.other-month { color: #ccc; }
+  .dashboard-cal-day.sun-col:not(.other-month):not(.today) { color: #dc3545; }
+  .dashboard-cal-day.sat-col:not(.other-month):not(.today) { color: #0d6efd; }
+  .dashboard-cal-day:not(.other-month):not(.today):hover { background: #f5f5f5; }
