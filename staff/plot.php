@@ -22,10 +22,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $existing = $pdo->prepare("SELECT plot_seedling_id, quantity FROM plot_seedlings WHERE plot_id = ? AND variety_id = ?");
                 $existing->execute([$plot_id, $variety_id]);
                 $row = $existing->fetch();
+                $staff_id = $_SESSION['staff_id'];
                 if ($row) {
                     $pdo->prepare("UPDATE plot_seedlings SET quantity = quantity + ? WHERE plot_seedling_id = ?")->execute([$quantity, $row['plot_seedling_id']]);
                 } else {
-                    $pdo->prepare("INSERT INTO plot_seedlings (plot_id, variety_id, quantity) VALUES (?,?,?)")->execute([$plot_id, $variety_id, $quantity]);
+                    $pdo->prepare("INSERT INTO plot_seedlings (plot_id, variety_id, staff_id, quantity) VALUES (?,?,?,?)")->execute([$plot_id, $variety_id, $staff_id, $quantity]);
                 }
             }
         }
@@ -51,6 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 } else {
                     $pdo->prepare("INSERT INTO inventory (variety_id, quantity) VALUES (?,?)")->execute([$ps['variety_id'], $quantity]);
                 }
+
+                $pdo->prepare("INSERT INTO inventory_logs (staff_id, variety_id, quantity) VALUES (?,?,?)")->execute([$_SESSION['staff_id'], $ps['variety_id'], $quantity]);
 
                 $zero = $pdo->prepare("DELETE FROM plot_seedlings WHERE plot_seedling_id = ? AND quantity = 0");
                 $zero->execute([$plot_seedling_id]);
@@ -110,7 +113,7 @@ $varieties = $pdo->query("SELECT v.variety_id, v.variety_name, s.seedling_name F
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Plots</title>
+<title>Plot — Staff</title>
 <link rel="stylesheet" href="/plant/assets/vendor/bootstrap-5/css/bootstrap.min.css">
 <link rel="stylesheet" href="/plant/assets/vendor/fontawesome-7/css/all.min.css">
 </head>
