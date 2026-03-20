@@ -92,6 +92,7 @@
     <li><a href="/plant/admin/inventory.php" class="nav-link <?= basename($_SERVER['PHP_SELF'])=='inventory.php'?'active':'' ?>"><i class="fas fa-boxes-stacked"></i> Inventory</a></li>
     <li><a href="/plant/admin/logs.php" class="nav-link <?= basename($_SERVER['PHP_SELF'])=='logs.php'?'active':'' ?>"><i class="fas fa-clock-rotate-left"></i> Logs</a></li>
     <li><a href="/plant/admin/reports.php" class="nav-link <?= basename($_SERVER['PHP_SELF'])=='reports.php'?'active':'' ?>"><i class="fas fa-chart-bar"></i> Reports</a></li>
+    <li><a href="/plant/admin/settings.php" class="nav-link <?= basename($_SERVER['PHP_SELF'])=='settings.php'?'active':'' ?>"><i class="fa-solid fa-gear me-1"></i> Settings</a></li>
   </ul>
   <div class="sidebar-footer">
     <div class="user-wrap">
@@ -115,7 +116,7 @@
         <p class="text-muted small mb-4">Are you sure you want to logout?</p>
         <div class="d-flex gap-2">
           <button class="btn btn-light flex-fill" data-bs-dismiss="modal">Cancel</button>
-          <a href="/plant/admin/logout.php" class="btn btn-danger flex-fill">Logout</a>
+          <a href="/plant/logout.php" class="btn btn-danger flex-fill">Logout</a>
         </div>
       </div>
     </div>

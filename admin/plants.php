@@ -12,11 +12,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
     }
 
+    if ($_POST['action'] === 'edit_seedling') {
+        $id   = (int)$_POST['seedling_id'];
+        $name = trim($_POST['seedling_name'] ?? '');
+        if ($id && $name) {
+            $pdo->prepare("UPDATE seedlings SET seedling_name = ? WHERE seedling_id = ?")->execute([$name, $id]);
+        }
+    }
+
     if ($_POST['action'] === 'add_variety') {
         $sid  = (int)$_POST['seedling_id'];
         $name = trim($_POST['variety_name'] ?? '');
         if ($sid && $name) {
             $pdo->prepare("INSERT INTO varieties (seedling_id, variety_name) VALUES (?,?)")->execute([$sid, $name]);
+        }
+    }
+
+    if ($_POST['action'] === 'edit_variety') {
+        $id   = (int)$_POST['variety_id'];
+        $sid  = (int)$_POST['seedling_id'];
+        $name = trim($_POST['variety_name'] ?? '');
+        if ($id && $sid && $name) {
+            $pdo->prepare("UPDATE varieties SET seedling_id = ?, variety_name = ? WHERE variety_id = ?")->execute([$sid, $name, $id]);
         }
     }
 
@@ -88,15 +105,26 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
               </thead>
               <tbody>
                 <?php if (empty($seedlings)): ?>
-                <tr><td colspan="3" class="text-center text-muted py-4">No seedlings found.</td></tr>
+                <tr><td colspan="2" class="text-center text-muted py-4">No seedlings found.</td></tr>
                 <?php else: ?>
-                <?php foreach ($seedlings as $i => $s): ?>
+                <?php foreach ($seedlings as $s): ?>
                 <tr>
                   <td class="fw-semibold"><?= htmlspecialchars($s['seedling_name']) ?></td>
                   <td class="text-end pe-3">
-                    <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteSeedlingModal" data-id="<?= $s['seedling_id'] ?>" data-name="<?= htmlspecialchars($s['seedling_name']) ?>">
-                      <i class="fas fa-trash"></i>
-                    </button>
+                    <div class="d-flex gap-1 justify-content-end">
+                      <button class="btn btn-sm btn-outline-primary"
+                        data-bs-toggle="modal" data-bs-target="#editSeedlingModal"
+                        data-id="<?= $s['seedling_id'] ?>"
+                        data-name="<?= htmlspecialchars($s['seedling_name']) ?>">
+                        <i class="fas fa-pen"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-danger"
+                        data-bs-toggle="modal" data-bs-target="#deleteSeedlingModal"
+                        data-id="<?= $s['seedling_id'] ?>"
+                        data-name="<?= htmlspecialchars($s['seedling_name']) ?>">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </div>
                   </td>
                 </tr>
                 <?php endforeach; ?>
@@ -124,16 +152,28 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
               </thead>
               <tbody>
                 <?php if (empty($varieties)): ?>
-                <tr><td colspan="4" class="text-center text-muted py-4">No varieties found.</td></tr>
+                <tr><td colspan="3" class="text-center text-muted py-4">No varieties found.</td></tr>
                 <?php else: ?>
-                <?php foreach ($varieties as $i => $v): ?>
+                <?php foreach ($varieties as $v): ?>
                 <tr>
                   <td class="text-muted small"><?= htmlspecialchars($v['seedling_name']) ?></td>
                   <td class="fw-semibold"><?= htmlspecialchars($v['variety_name']) ?></td>
                   <td class="text-end pe-3">
-                    <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteVarietyModal" data-id="<?= $v['variety_id'] ?>" data-name="<?= htmlspecialchars($v['variety_name']) ?>">
-                      <i class="fas fa-trash"></i>
-                    </button>
+                    <div class="d-flex gap-1 justify-content-end">
+                      <button class="btn btn-sm btn-outline-primary"
+                        data-bs-toggle="modal" data-bs-target="#editVarietyModal"
+                        data-id="<?= $v['variety_id'] ?>"
+                        data-name="<?= htmlspecialchars($v['variety_name']) ?>"
+                        data-seedling-id="<?= $v['seedling_id'] ?>">
+                        <i class="fas fa-pen"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-danger"
+                        data-bs-toggle="modal" data-bs-target="#deleteVarietyModal"
+                        data-id="<?= $v['variety_id'] ?>"
+                        data-name="<?= htmlspecialchars($v['variety_name']) ?>">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </div>
                   </td>
                 </tr>
                 <?php endforeach; ?>
@@ -147,6 +187,7 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
   </div>
 </div>
 
+<!-- ADD SEEDLING -->
 <div class="modal fade" id="addSeedlingModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content border-0 shadow">
@@ -161,14 +202,39 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
           <input type="text" name="seedling_name" class="form-control" required maxlength="100">
         </div>
         <div class="modal-footer border-0 pt-0">
-          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-success">Add</button>
+          <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success btn-sm">Add</button>
         </div>
       </form>
     </div>
   </div>
 </div>
 
+<!-- EDIT SEEDLING -->
+<div class="modal fade" id="editSeedlingModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title fw-bold">Edit Seedling</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST">
+        <input type="hidden" name="action" value="edit_seedling">
+        <input type="hidden" name="seedling_id" id="editSeedlingId">
+        <div class="modal-body">
+          <label class="form-label small fw-semibold text-secondary">Seedling Name</label>
+          <input type="text" name="seedling_name" id="editSeedlingName" class="form-control" required maxlength="100">
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ADD VARIETY -->
 <div class="modal fade" id="addVarietyModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content border-0 shadow">
@@ -194,14 +260,50 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
           </div>
         </div>
         <div class="modal-footer border-0 pt-0">
-          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-success">Add</button>
+          <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success btn-sm">Add</button>
         </div>
       </form>
     </div>
   </div>
 </div>
 
+<!-- EDIT VARIETY -->
+<div class="modal fade" id="editVarietyModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title fw-bold">Edit Variety</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST">
+        <input type="hidden" name="action" value="edit_variety">
+        <input type="hidden" name="variety_id" id="editVarietyId">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold text-secondary">Seedling</label>
+            <select name="seedling_id" id="editVarietySeedlingId" class="form-select" required>
+              <option value="">— Select Seedling —</option>
+              <?php foreach ($seedlings as $s): ?>
+              <option value="<?= $s['seedling_id'] ?>"><?= htmlspecialchars($s['seedling_name']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div>
+            <label class="form-label small fw-semibold text-secondary">Variety Name</label>
+            <input type="text" name="variety_name" id="editVarietyName" class="form-control" required maxlength="100">
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE SEEDLING -->
 <div class="modal fade" id="deleteSeedlingModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content border-0 shadow">
@@ -212,8 +314,8 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
           <input type="hidden" name="action" value="delete_seedling">
           <input type="hidden" name="seedling_id" id="deleteSeedlingId">
           <div class="d-flex gap-2">
-            <button type="button" class="btn btn-light flex-fill" data-bs-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-danger flex-fill">Delete</button>
+            <button type="button" class="btn btn-light btn-sm flex-fill" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-danger btn-sm flex-fill">Delete</button>
           </div>
         </form>
       </div>
@@ -221,6 +323,7 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
   </div>
 </div>
 
+<!-- DELETE VARIETY -->
 <div class="modal fade" id="deleteVarietyModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content border-0 shadow">
@@ -231,8 +334,8 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
           <input type="hidden" name="action" value="delete_variety">
           <input type="hidden" name="variety_id" id="deleteVarietyId">
           <div class="d-flex gap-2">
-            <button type="button" class="btn btn-light flex-fill" data-bs-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-danger flex-fill">Delete</button>
+            <button type="button" class="btn btn-light btn-sm flex-fill" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-danger btn-sm flex-fill">Delete</button>
           </div>
         </form>
       </div>
@@ -242,16 +345,27 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
 
 <script src="/plant/assets/vendor/bootstrap-5/js/bootstrap.bundle.min.js"></script>
 <script>
+document.getElementById('editSeedlingModal').addEventListener('show.bs.modal', function(e) {
+    const b = e.relatedTarget;
+    document.getElementById('editSeedlingId').value       = b.dataset.id;
+    document.getElementById('editSeedlingName').value     = b.dataset.name;
+});
+document.getElementById('editVarietyModal').addEventListener('show.bs.modal', function(e) {
+    const b = e.relatedTarget;
+    document.getElementById('editVarietyId').value        = b.dataset.id;
+    document.getElementById('editVarietyName').value      = b.dataset.name;
+    document.getElementById('editVarietySeedlingId').value = b.dataset.seedlingId;
+});
 document.getElementById('deleteSeedlingModal').addEventListener('show.bs.modal', function(e) {
-  document.getElementById('deleteSeedlingId').value = e.relatedTarget.dataset.id;
-  document.getElementById('deleteSeedlingName').textContent = e.relatedTarget.dataset.name;
+    document.getElementById('deleteSeedlingId').value             = e.relatedTarget.dataset.id;
+    document.getElementById('deleteSeedlingName').textContent     = e.relatedTarget.dataset.name;
 });
 document.getElementById('deleteVarietyModal').addEventListener('show.bs.modal', function(e) {
-  document.getElementById('deleteVarietyId').value = e.relatedTarget.dataset.id;
-  document.getElementById('deleteVarietyName').textContent = e.relatedTarget.dataset.name;
+    document.getElementById('deleteVarietyId').value              = e.relatedTarget.dataset.id;
+    document.getElementById('deleteVarietyName').textContent      = e.relatedTarget.dataset.name;
 });
 document.getElementById('toggler')?.addEventListener('click', function() {
-  document.getElementById('sidebar').classList.toggle('show');
+    document.getElementById('sidebar').classList.toggle('show');
 });
 </script>
 </body>
