@@ -3,6 +3,22 @@ require_once __DIR__ . '/../includes/staff/auth.php';
 require_once __DIR__ . '/../config/config.php';
 require_staff_auth();
 
+if (!defined('STAFF_ENC_KEY')) {
+  define('STAFF_ENC_KEY',    'xK#9mP$2vL@nQ8zR!dW6sY&4bT*1jF0e');
+  define('STAFF_ENC_METHOD', 'AES-256-CBC');
+}
+if (!function_exists('dec_staff')) {
+  function dec_staff($data) {
+      if ($data === null || $data === '') return '';
+      $decoded = base64_decode($data);
+      if (strlen($decoded) < 16) return $data;
+      $iv     = substr($decoded, 0, 16);
+      $result = openssl_decrypt(base64_encode(substr($decoded, 16)), STAFF_ENC_METHOD, STAFF_ENC_KEY, 0, $iv);
+      return $result !== false ? $result : $data;
+  }
+}
+$staff_firstname = dec_staff($_SESSION['staff_firstname'] ?? '');
+
 $staff_id = $_SESSION['staff_id'];
 
 $total_in_plot   = $pdo->query("SELECT COALESCE(SUM(quantity),0) FROM plot_seedlings")->fetchColumn();
@@ -45,7 +61,7 @@ $recent_orders = $recent_orders->fetchAll();
 <div class="container-fluid px-4 py-4">
 
   <div class="mb-3">
-    <span class="fw-semibold text-dark">Welcome, <?= htmlspecialchars($_SESSION['staff_firstname']) ?>!</span>
+    <span class="fw-semibold text-dark">Welcome, <?= htmlspecialchars($staff_firstname) ?>!</span>
     <span class="text-muted small ms-2"><?= date('D, M d Y') ?></span>
   </div>
 

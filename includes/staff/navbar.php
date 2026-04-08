@@ -1,6 +1,27 @@
 <?php
 require_once __DIR__ . '/../../config/config.php';
 
+if (!defined('STAFF_ENC_KEY')) {
+    define('STAFF_ENC_KEY',    'xK#9mP$2vL@nQ8zR!dW6sY&4bT*1jF0e');
+    define('STAFF_ENC_METHOD', 'AES-256-CBC');
+}
+
+if (!function_exists('dec_staff')) {
+    function dec_staff($data) {
+        if ($data === null || $data === '') return '';
+        $decoded = base64_decode($data);
+        if (strlen($decoded) < 16) return $data;
+        $iv     = substr($decoded, 0, 16);
+        $result = openssl_decrypt(base64_encode(substr($decoded, 16)), STAFF_ENC_METHOD, STAFF_ENC_KEY, 0, $iv);
+        return $result !== false ? $result : $data;
+    }
+}
+
+$staff_display_name = trim(
+    dec_staff($_SESSION['staff_firstname'] ?? '') . ' ' .
+    dec_staff($_SESSION['staff_lastname']  ?? '')
+);
+
 $staff_id = $_SESSION['staff_id'];
 $ua       = $_SERVER['HTTP_USER_AGENT']      ?? '';
 $lang     = $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '';
@@ -43,11 +64,21 @@ function is_safe_staff($val) {
     return true;
 }
 
-$settings_success = $settings_error = '';
+$settings_success   = $settings_error = '';
+$sq_success         = $sq_error = '';
+$sq_confirm_mode    = false;
+$settings_open_section = '';
+
+$stmt_sq = $pdo->prepare("SELECT sa.*, sq.question FROM security_answer sa JOIN security_questions sq ON sa.question_id = sq.id WHERE sa.user_id = ? AND sa.user_type = 'staff'");
+$stmt_sq->execute([$staff_id]);
+$existing_sq = $stmt_sq->fetch();
+
+$all_questions = $pdo->query("SELECT * FROM security_questions ORDER BY id ASC")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['settings_action'])) {
 
     if ($_POST['settings_action'] === 'change_password') {
+        $settings_open_section = 'pw';
         $current = $_POST['current_password'] ?? '';
         $new     = $_POST['new_password']     ?? '';
         $confirm = $_POST['confirm_password'] ?? '';
@@ -72,12 +103,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['settings_action'])) {
         }
     }
 
+    if ($_POST['settings_action'] === 'set_security_question') {
+        $settings_open_section = 'sq';
+        $question_id = (int)($_POST['question_id'] ?? 0);
+        $answer      = trim($_POST['sq_answer'] ?? '');
+
+        if ($question_id <= 0) {
+            $sq_error = 'Please select a security question.';
+        } elseif (empty($answer)) {
+            $sq_error = 'Answer cannot be empty.';
+        } elseif (strlen($answer) < 2) {
+            $sq_error = 'Answer is too short.';
+        } else {
+            $answer_hash = password_hash(strtolower($answer), PASSWORD_DEFAULT);
+            if ($existing_sq) {
+                $pdo->prepare("UPDATE security_answer SET question_id = ?, answer_hash = ? WHERE user_id = ? AND user_type = 'staff'")
+                    ->execute([$question_id, $answer_hash, $staff_id]);
+            } else {
+                $pdo->prepare("INSERT INTO security_answer (user_id, user_type, question_id, answer_hash) VALUES (?, 'staff', ?, ?)")
+                    ->execute([$staff_id, $question_id, $answer_hash]);
+            }
+            $sq_success = 'Security question saved successfully.';
+            $stmt_sq->execute([$staff_id]);
+            $existing_sq = $stmt_sq->fetch();
+        }
+    }
+
+    if ($_POST['settings_action'] === 'request_reset_sq') {
+        $settings_open_section = 'sq';
+        $sq_confirm_mode = true;
+    }
+
+    if ($_POST['settings_action'] === 'confirm_reset_sq') {
+        $settings_open_section = 'sq';
+        $current_pw = $_POST['confirm_password_reset'] ?? '';
+
+        $stmt = $pdo->prepare("SELECT password FROM staff_info WHERE staff_id = ?");
+        $stmt->execute([$staff_id]);
+        $staff_row = $stmt->fetch();
+
+        if (!password_verify($current_pw, $staff_row['password'])) {
+            $sq_error        = 'Incorrect password. Reset cancelled.';
+            $sq_confirm_mode = false;
+        } else {
+            $pdo->prepare("DELETE FROM security_answer WHERE user_id = ? AND user_type = 'staff'")
+                ->execute([$staff_id]);
+            $existing_sq     = null;
+            $sq_success      = 'Security question has been reset. Please set a new one.';
+            $sq_confirm_mode = false;
+        }
+    }
+
     if ($_POST['settings_action'] === 'remove_device') {
         $device_id = (int)($_POST['device_id'] ?? 0);
         if ($device_id) {
             $pdo->prepare("DELETE FROM trusted_devices WHERE id = ? AND user_id = ? AND user_type = 'staff'")
                 ->execute([$device_id, $staff_id]);
         }
+        $settings_success = 'Device removed successfully.';
     }
 
     if ($_POST['settings_action'] === 'approve_device') {
@@ -166,7 +249,7 @@ $staff_pending = $pdo->query("
       </ul>
       <div class="dropdown">
         <button class="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown">
-          <i class="fas fa-user me-1"></i><?= htmlspecialchars($_SESSION['staff_firstname'] . ' ' . $_SESSION['staff_lastname']) ?>
+          <i class="fas fa-user me-1"></i><?= htmlspecialchars($staff_display_name) ?>
         </button>
         <ul class="dropdown-menu dropdown-menu-end">
           <li>
@@ -270,6 +353,11 @@ $staff_pending = $pdo->query("
             <div style="height:1px;background:#f0f0f0;margin:0 22px;"></div>
             <div id="staff-body-pw" style="max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease;padding:0 22px;">
               <div class="pt-4 pb-3">
+                <?php if ($settings_open_section === 'pw' && $settings_error): ?>
+                <div class="alert alert-danger py-2 small border-0 rounded-3 mb-3"><i class="fas fa-exclamation-circle me-1"></i><?= htmlspecialchars($settings_error) ?></div>
+                <?php elseif ($settings_open_section === 'pw' && $settings_success): ?>
+                <div class="alert alert-success py-2 small border-0 rounded-3 mb-3"><i class="fas fa-check-circle me-1"></i><?= htmlspecialchars($settings_success) ?></div>
+                <?php endif; ?>
                 <form method="POST">
                   <input type="hidden" name="settings_action" value="change_password">
                   <div class="mb-3">
@@ -295,6 +383,104 @@ $staff_pending = $pdo->query("
                   </div>
                   <button type="submit" class="btn btn-primary" style="border-radius:8px;padding:9px 20px;font-size:14px;"><i class="fas fa-save me-1"></i> Update Password</button>
                 </form>
+              </div>
+            </div>
+          </div>
+
+          <div class="card border-0 shadow-sm mb-3" style="border-radius:12px;overflow:hidden;">
+            <div class="card-header bg-white border-0 d-flex align-items-center justify-content-between px-4 py-3" style="cursor:pointer;" onclick="toggleStaffSection('sq')">
+              <div class="d-flex align-items-center gap-3">
+                <div style="width:40px;height:40px;border-radius:10px;background:rgba(25,135,84,.1);display:flex;align-items:center;justify-content:center;color:#198754;font-size:16px;">
+                  <i class="fas fa-shield-halved"></i>
+                </div>
+                <div>
+                  <div style="font-weight:600;font-size:15px;color:#1a1a2e;">
+                    Security Question
+                    <?php if ($existing_sq): ?>
+                    <span style="font-size:11px;padding:2px 8px;border-radius:20px;background:#d1fae5;color:#065f46;font-weight:500;margin-left:6px;"><i class="fas fa-check me-1"></i>Set</span>
+                    <?php endif; ?>
+                  </div>
+                  <div style="font-size:12px;color:#6c757d;">
+                    <?= $existing_sq ? 'Your security question is configured' : 'No security question set yet' ?>
+                  </div>
+                </div>
+              </div>
+              <i class="fas fa-chevron-down text-muted small" id="staff-chev-sq" style="transition:transform .25s;"></i>
+            </div>
+            <div style="height:1px;background:#f0f0f0;margin:0 22px;"></div>
+            <div id="staff-body-sq" style="max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease;padding:0 22px;">
+              <div class="pt-4 pb-3">
+
+                <?php if ($sq_success): ?>
+                <div class="alert alert-success py-2 small border-0 rounded-3 mb-3"><i class="fas fa-check-circle me-1"></i><?= htmlspecialchars($sq_success) ?></div>
+                <?php elseif ($sq_error): ?>
+                <div class="alert alert-danger py-2 small border-0 rounded-3 mb-3"><i class="fas fa-exclamation-circle me-1"></i><?= htmlspecialchars($sq_error) ?></div>
+                <?php endif; ?>
+
+                <?php if ($existing_sq && !$sq_confirm_mode && !$sq_success): ?>
+                <div style="background:#fff8f0;border:1.5px solid #ffc107;border-radius:10px;padding:16px 18px;margin-bottom:16px;">
+                  <div class="d-flex align-items-start gap-2">
+                    <i class="fas fa-circle-info text-warning mt-1"></i>
+                    <div>
+                      <div style="font-weight:600;font-size:13px;color:#92400e;">Current security question</div>
+                      <div style="font-size:13px;color:#1a1a2e;margin-top:4px;"><?= htmlspecialchars($existing_sq['question']) ?></div>
+                      <div style="font-size:12px;color:#6c757d;margin-top:2px;">Answer is hidden for security.</div>
+                    </div>
+                  </div>
+                </div>
+                <p class="text-muted small mb-3">To change your security question, you must first confirm your password.</p>
+                <form method="POST">
+                  <input type="hidden" name="settings_action" value="request_reset_sq">
+                  <button type="submit" class="btn btn-warning text-dark" style="border-radius:8px;padding:9px 20px;font-size:14px;">
+                    <i class="fas fa-rotate-right me-1"></i> Reset Security Question
+                  </button>
+                </form>
+
+                <?php elseif ($sq_confirm_mode): ?>
+                <div style="background:#fff8f0;border:1.5px solid #ffc107;border-radius:10px;padding:16px 18px;margin-bottom:16px;">
+                  <div style="font-weight:600;font-size:13px;color:#92400e;margin-bottom:4px;"><i class="fas fa-triangle-exclamation me-1"></i> Confirm your identity</div>
+                  <div style="font-size:12px;color:#6c757d;">Enter your current password to reset your security question.</div>
+                </div>
+                <form method="POST">
+                  <input type="hidden" name="settings_action" value="confirm_reset_sq">
+                  <div class="mb-3">
+                    <label style="font-size:12px;font-weight:600;color:#6c757d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;display:block;">Current Password</label>
+                    <div class="input-group">
+                      <input type="password" name="confirm_password_reset" class="form-control" style="border-radius:8px 0 0 8px;border:1.5px solid #e2e8f0;font-size:14px;" required autofocus>
+                      <button type="button" class="btn btn-outline-secondary" style="border-radius:0 8px 8px 0;border:1.5px solid #e2e8f0;" onclick="toggleStaffPw('confirm_password_reset',this)"><i class="fas fa-eye fa-sm"></i></button>
+                    </div>
+                  </div>
+                  <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-danger" style="border-radius:8px;padding:9px 20px;font-size:14px;">
+                      <i class="fas fa-trash me-1"></i> Confirm Reset
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" style="border-radius:8px;padding:9px 20px;font-size:14px;" data-bs-dismiss="modal">Cancel</button>
+                  </div>
+                </form>
+
+                <?php else: ?>
+                <form method="POST">
+                  <input type="hidden" name="settings_action" value="set_security_question">
+                  <div class="mb-3">
+                    <label style="font-size:12px;font-weight:600;color:#6c757d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;display:block;">Security Question</label>
+                    <select name="question_id" class="form-control" style="border-radius:8px;border:1.5px solid #e2e8f0;font-size:14px;" required>
+                      <option value="">— Select a question —</option>
+                      <?php foreach ($all_questions as $q): ?>
+                      <option value="<?= $q['id'] ?>"><?= htmlspecialchars($q['question']) ?></option>
+                      <?php endforeach; ?>
+                    </select>
+                  </div>
+                  <div class="mb-4">
+                    <label style="font-size:12px;font-weight:600;color:#6c757d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;display:block;">Your Answer</label>
+                    <input type="text" name="sq_answer" class="form-control" style="border-radius:8px;border:1.5px solid #e2e8f0;font-size:14px;" placeholder="Enter your answer" required autocomplete="off">
+                    <div style="font-size:11px;color:#6c757d;margin-top:5px;"><i class="fas fa-info-circle me-1"></i>Answer is case-insensitive and stored securely.</div>
+                  </div>
+                  <button type="submit" class="btn btn-success" style="border-radius:8px;padding:9px 20px;font-size:14px;">
+                    <i class="fas fa-save me-1"></i> Save Security Question
+                  </button>
+                </form>
+                <?php endif; ?>
+
               </div>
             </div>
           </div>
@@ -371,7 +557,7 @@ function toggleStaffSection(id) {
     document.querySelectorAll('[id^="staff-body-"]').forEach(b => { b.style.maxHeight = '0'; b.style.padding = '0 22px'; });
     document.querySelectorAll('[id^="staff-chev-"]').forEach(c => c.style.transform = '');
     if (!isOpen) {
-        body.style.maxHeight = '600px';
+        body.style.maxHeight = '700px';
         body.style.padding   = '0 22px';
         chev.style.transform = 'rotate(180deg)';
     }
@@ -389,15 +575,21 @@ function toggleStaffPw(name, btn) {
     }
 }
 
-<?php if ($settings_success || $settings_error || !empty($staff_pending)): ?>
+<?php
+$open_js = '';
+if ($settings_open_section === 'sq' || $sq_confirm_mode) {
+    $open_js = 'sq';
+} elseif ($settings_open_section === 'pw' || $settings_success || $settings_error) {
+    $open_js = 'pw';
+} elseif (!empty($staff_pending)) {
+    $open_js = 'pending';
+}
+?>
+<?php if ($open_js): ?>
 document.addEventListener('DOMContentLoaded', function() {
     const modal = new bootstrap.Modal(document.getElementById('staffSettingsModal'));
     modal.show();
-    <?php if ($settings_success || $settings_error): ?>
-    toggleStaffSection('pw');
-    <?php elseif (!empty($staff_pending)): ?>
-    toggleStaffSection('pending');
-    <?php endif; ?>
+    toggleStaffSection('<?= $open_js ?>');
 });
 <?php endif; ?>
 

@@ -3,13 +3,30 @@ require_once __DIR__ . '/../includes/admin/auth.php';
 require_once __DIR__ . '/../config/config.php';
 require_admin_auth();
 
-$date_from    = $_GET['date_from'] ?? '';
-$date_to      = $_GET['date_to'] ?? '';
+if (!defined('STAFF_ENC_KEY')) {
+    define('STAFF_ENC_KEY',    'xK#9mP$2vL@nQ8zR!dW6sY&4bT*1jF0e');
+    define('STAFF_ENC_METHOD', 'AES-256-CBC');
+}
+
+if (!function_exists('dec_staff')) {
+    function dec_staff($data) {
+        if ($data === null || $data === '') return '';
+        $decoded = base64_decode($data);
+        if (strlen($decoded) < 16) return $data;
+        $iv     = substr($decoded, 0, 16);
+        $result = openssl_decrypt(base64_encode(substr($decoded, 16)), STAFF_ENC_METHOD, STAFF_ENC_KEY, 0, $iv);
+        return $result !== false ? $result : $data;
+    }
+}
+
+$date_from     = $_GET['date_from'] ?? '';
+$date_to       = $_GET['date_to'] ?? '';
 $filter_action = $_GET['action'] ?? '';
 
 $add_logs = $pdo->query("
-    SELECT 
-        CONCAT(si.firstname, ' ', si.lastname) as staff_name,
+    SELECT
+        si.firstname as staff_firstname,
+        si.lastname  as staff_lastname,
         'Added Seedling to Plot' as action,
         CONCAT(s.seedling_name, ' — ', v.variety_name, ' (', ps.quantity, ' pcs) in ', p.plot_name) as description,
         ps.added_at as logged_at
@@ -22,7 +39,8 @@ $add_logs = $pdo->query("
 
 $inv_logs = $pdo->query("
     SELECT
-        CONCAT(si.firstname, ' ', si.lastname) as staff_name,
+        si.firstname as staff_firstname,
+        si.lastname  as staff_lastname,
         'Moved to Inventory' as action,
         CONCAT(s.seedling_name, ' — ', v.variety_name, ' (', il.quantity, ' pcs)') as description,
         il.logged_at
@@ -34,7 +52,8 @@ $inv_logs = $pdo->query("
 
 $dmg_logs = $pdo->query("
     SELECT
-        CONCAT(si.firstname, ' ', si.lastname) as staff_name,
+        si.firstname as staff_firstname,
+        si.lastname  as staff_lastname,
         'Reported Damage' as action,
         CONCAT(s.seedling_name, ' — ', v.variety_name, ' (', dr.quantity_damaged, ' pcs) in ', p.plot_name) as description,
         dr.reported_at as logged_at
@@ -48,7 +67,8 @@ $dmg_logs = $pdo->query("
 
 $order_logs = $pdo->query("
     SELECT
-        CONCAT(si.firstname, ' ', si.lastname) as staff_name,
+        si.firstname as staff_firstname,
+        si.lastname  as staff_lastname,
         'Recorded Order' as action,
         CONCAT('Customer: ', c.firstname, ' ', c.lastname) as description,
         o.ordered_at as logged_at
@@ -58,6 +78,11 @@ $order_logs = $pdo->query("
 ")->fetchAll();
 
 $all_logs = array_merge($add_logs, $inv_logs, $dmg_logs, $order_logs);
+
+foreach ($all_logs as &$log) {
+    $log['staff_name'] = trim(dec_staff($log['staff_firstname']) . ' ' . dec_staff($log['staff_lastname']));
+}
+unset($log);
 
 if ($filter_action) {
     $all_logs = array_filter($all_logs, fn($l) => $l['action'] === $filter_action);

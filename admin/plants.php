@@ -80,7 +80,7 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
   <div class="p-4">
 
     <div class="d-flex justify-content-end gap-2 mb-3">
-      <button class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#addSeedlingModal">
+      <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addSeedlingModal">
         <i class="fas fa-plus me-1"></i> Add Seedling
       </button>
       <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addVarietyModal">
@@ -112,13 +112,13 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
                   <td class="fw-semibold"><?= htmlspecialchars($s['seedling_name']) ?></td>
                   <td class="text-end pe-3">
                     <div class="d-flex gap-1 justify-content-end">
-                      <button class="btn btn-sm btn-outline-primary"
+                      <button class="btn btn-sm btn-primary"
                         data-bs-toggle="modal" data-bs-target="#editSeedlingModal"
                         data-id="<?= $s['seedling_id'] ?>"
                         data-name="<?= htmlspecialchars($s['seedling_name']) ?>">
                         <i class="fas fa-pen"></i>
                       </button>
-                      <button class="btn btn-sm btn-outline-danger"
+                      <button class="btn btn-sm btn-danger"
                         data-bs-toggle="modal" data-bs-target="#deleteSeedlingModal"
                         data-id="<?= $s['seedling_id'] ?>"
                         data-name="<?= htmlspecialchars($s['seedling_name']) ?>">
@@ -160,14 +160,14 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
                   <td class="fw-semibold"><?= htmlspecialchars($v['variety_name']) ?></td>
                   <td class="text-end pe-3">
                     <div class="d-flex gap-1 justify-content-end">
-                      <button class="btn btn-sm btn-outline-primary"
+                      <button class="btn btn-sm btn-primary"
                         data-bs-toggle="modal" data-bs-target="#editVarietyModal"
                         data-id="<?= $v['variety_id'] ?>"
                         data-name="<?= htmlspecialchars($v['variety_name']) ?>"
                         data-seedling-id="<?= $v['seedling_id'] ?>">
                         <i class="fas fa-pen"></i>
                       </button>
-                      <button class="btn btn-sm btn-outline-danger"
+                      <button class="btn btn-sm btn-danger"
                         data-bs-toggle="modal" data-bs-target="#deleteVarietyModal"
                         data-id="<?= $v['variety_id'] ?>"
                         data-name="<?= htmlspecialchars($v['variety_name']) ?>">
@@ -187,7 +187,6 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
   </div>
 </div>
 
-<!-- ADD SEEDLING -->
 <div class="modal fade" id="addSeedlingModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content border-0 shadow">
@@ -210,7 +209,6 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
   </div>
 </div>
 
-<!-- EDIT SEEDLING -->
 <div class="modal fade" id="editSeedlingModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content border-0 shadow">
@@ -234,7 +232,6 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
   </div>
 </div>
 
-<!-- ADD VARIETY -->
 <div class="modal fade" id="addVarietyModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content border-0 shadow">
@@ -268,7 +265,6 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
   </div>
 </div>
 
-<!-- EDIT VARIETY -->
 <div class="modal fade" id="editVarietyModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content border-0 shadow">
@@ -303,7 +299,6 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
   </div>
 </div>
 
-<!-- DELETE SEEDLING -->
 <div class="modal fade" id="deleteSeedlingModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content border-0 shadow">
@@ -323,7 +318,6 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
   </div>
 </div>
 
-<!-- DELETE VARIETY -->
 <div class="modal fade" id="deleteVarietyModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content border-0 shadow">

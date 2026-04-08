@@ -77,9 +77,9 @@ function get_request_status($pdo, $user_id, $user_type, $device_hash) {
     return $r ? $r['status'] : null;
 }
 
-$error          = '';
-$device_status  = null;
-$timeout        = isset($_GET['timeout']);
+$error         = '';
+$device_status = null;
+$timeout       = isset($_GET['timeout']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isBanned) {
     $username = trim($_POST['username'] ?? '');
@@ -276,7 +276,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isBanned) {
         <div class="blocked-hint" id="hint-username"><i class="fas fa-triangle-exclamation me-1"></i> Special characters are not allowed.</div>
       </div>
 
-      <div class="mb-4">
+      <div class="mb-3">
         <label for="password" class="form-label small fw-semibold text-secondary">Password</label>
         <div class="input-group">
           <span class="input-group-text bg-white border-end-0"><i class="fas fa-lock text-secondary small"></i></span>
@@ -291,15 +291,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isBanned) {
         <div class="blocked-hint" id="hint-password"><i class="fas fa-triangle-exclamation me-1"></i> Special characters are not allowed.</div>
       </div>
 
+      <div class="text-center mb-4">
+        <a href="/plant/forgot_password.php" class="text-muted small text-decoration-none">
+            <i class="fas fa-key me-1"></i>Forgot password?
+        </a>
+      </div>
+
       <button type="submit" class="btn btn-success w-100 fw-semibold" <?= $isBanned ? 'disabled' : '' ?>>
         <i class="fas fa-right-to-bracket me-2"></i><?= $isBanned ? 'Account Locked' : 'Login' ?>
       </button>
-
-      <div class="text-center mt-3">
-        <!-- <a href="/plant/forgot_password.php" class="text-muted small text-decoration-none">
-            Forgot password?
-        </a> -->
-      </div>
     </form>
     <?php elseif ($device_status === 'pending'): ?>
     <div class="text-center mt-2">
