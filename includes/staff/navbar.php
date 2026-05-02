@@ -23,34 +23,6 @@ $staff_display_name = trim(
 );
 
 $staff_id = $_SESSION['staff_id'];
-$ua       = $_SERVER['HTTP_USER_AGENT']      ?? '';
-$lang     = $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '';
-$encoding = $_SERVER['HTTP_ACCEPT_ENCODING'] ?? '';
-$cur_hash = hash('sha256', $ua . $lang . $encoding);
-
-function get_browser_name_staff($ua) {
-    if (!$ua) return 'Unknown';
-    if (str_contains($ua, 'Edg'))     return 'Microsoft Edge';
-    if (str_contains($ua, 'OPR'))     return 'Opera';
-    if (str_contains($ua, 'Chrome'))  return 'Chrome';
-    if (str_contains($ua, 'Firefox')) return 'Firefox';
-    if (str_contains($ua, 'Safari'))  return 'Safari';
-    return 'Unknown Browser';
-}
-
-function get_os_name_staff($ua) {
-    if (!$ua) return 'Unknown OS';
-    if (str_contains($ua, 'Windows NT 10')) return 'Windows 10/11';
-    if (str_contains($ua, 'Windows NT 6.3')) return 'Windows 8.1';
-    if (str_contains($ua, 'Windows NT 6.1')) return 'Windows 7';
-    if (str_contains($ua, 'Windows'))        return 'Windows';
-    if (str_contains($ua, 'Mac OS X'))       return 'macOS';
-    if (str_contains($ua, 'iPhone'))         return 'iPhone';
-    if (str_contains($ua, 'iPad'))           return 'iPad';
-    if (str_contains($ua, 'Android'))        return 'Android';
-    if (str_contains($ua, 'Linux'))          return 'Linux';
-    return 'Unknown OS';
-}
 
 function is_safe_staff($val) {
     $blocked = ["'", '"', ';', '--', '#', '/*', '*/', 'SELECT', 'INSERT', 'UPDATE',
@@ -153,67 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['settings_action'])) {
             $sq_confirm_mode = false;
         }
     }
-
-    if ($_POST['settings_action'] === 'remove_device') {
-        $device_id = (int)($_POST['device_id'] ?? 0);
-        if ($device_id) {
-            $pdo->prepare("DELETE FROM trusted_devices WHERE id = ? AND user_id = ? AND user_type = 'staff'")
-                ->execute([$device_id, $staff_id]);
-        }
-        $settings_success = 'Device removed successfully.';
-    }
-
-    if ($_POST['settings_action'] === 'approve_device') {
-        $request_id = (int)($_POST['request_id'] ?? 0);
-        if ($request_id) {
-            $req = $pdo->prepare("SELECT * FROM device_requests WHERE id = ?");
-            $req->execute([$request_id]);
-            $r = $req->fetch();
-            if ($r) {
-                $pdo->prepare("
-                    INSERT INTO trusted_devices (user_id, user_type, device_hash, ip_address, user_agent, browser, is_approved)
-                    VALUES (?, ?, ?, ?, ?, ?, 1)
-                    ON DUPLICATE KEY UPDATE is_approved = 1, ip_address = ?, browser = ?
-                ")->execute([$r['user_id'], $r['user_type'], $r['device_hash'], $r['ip_address'], $r['user_agent'], $r['browser'], $r['ip_address'], $r['browser']]);
-                $pdo->prepare("UPDATE device_requests SET status = 'approved' WHERE id = ?")
-                    ->execute([$request_id]);
-            }
-        }
-        $settings_success = 'Device approved successfully.';
-    }
-
-    if ($_POST['settings_action'] === 'reject_device') {
-        $request_id = (int)($_POST['request_id'] ?? 0);
-        if ($request_id) {
-            $pdo->prepare("UPDATE device_requests SET status = 'rejected' WHERE id = ?")
-                ->execute([$request_id]);
-        }
-        $settings_success = 'Device rejected.';
-    }
 }
-
-$trusted_devices = $pdo->prepare("SELECT * FROM trusted_devices WHERE user_id = ? AND user_type = 'staff' ORDER BY created_at DESC");
-$trusted_devices->execute([$staff_id]);
-$staff_devices = $trusted_devices->fetchAll();
-
-if (empty($staff_devices)) {
-    $pdo->prepare("
-        INSERT INTO trusted_devices (user_id, user_type, device_hash, ip_address, user_agent, browser, is_approved)
-        VALUES (?, 'staff', ?, ?, ?, ?, 1)
-        ON DUPLICATE KEY UPDATE is_approved = 1
-    ")->execute([$staff_id, $cur_hash, $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0', $ua, get_browser_name_staff($ua)]);
-
-    $trusted_devices->execute([$staff_id]);
-    $staff_devices = $trusted_devices->fetchAll();
-}
-
-$staff_pending = $pdo->query("
-    SELECT dr.*,
-        (SELECT username FROM staff_info WHERE staff_id = dr.user_id) as username
-    FROM device_requests dr
-    WHERE dr.status = 'pending' AND dr.user_type = 'staff'
-    ORDER BY dr.created_at DESC
-")->fetchAll();
 ?>
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
@@ -281,62 +193,6 @@ $staff_pending = $pdo->query("
           <div class="alert alert-danger py-2 small border-0 rounded-3 mb-3"><i class="fas fa-exclamation-circle me-1"></i><?= htmlspecialchars($settings_error) ?></div>
           <?php endif; ?>
 
-          <?php if (!empty($staff_pending)): ?>
-          <div class="card border-0 shadow-sm mb-3" style="border-radius:12px;overflow:hidden;">
-            <div class="card-header bg-white border-0 d-flex align-items-center justify-content-between px-4 py-3" style="cursor:pointer;" onclick="toggleStaffSection('pending')">
-              <div class="d-flex align-items-center gap-3">
-                <div style="width:40px;height:40px;border-radius:10px;background:rgba(255,193,7,.1);display:flex;align-items:center;justify-content:center;color:#ffc107;font-size:16px;">
-                  <i class="fas fa-clock"></i>
-                </div>
-                <div>
-                  <div style="font-weight:600;font-size:15px;color:#1a1a2e;">
-                    Pending Device Requests
-                    <span class="badge bg-danger ms-1" style="font-size:11px;"><?= count($staff_pending) ?></span>
-                  </div>
-                  <div style="font-size:12px;color:#6c757d;">Devices waiting for approval</div>
-                </div>
-              </div>
-              <i class="fas fa-chevron-down text-muted small" id="staff-chev-pending" style="transition:transform .25s;transform:rotate(180deg);"></i>
-            </div>
-            <div style="height:1px;background:#f0f0f0;margin:0 22px;"></div>
-            <div id="staff-body-pending" style="max-height:600px;overflow:hidden;transition:max-height .3s ease,padding .3s ease;padding:0 22px;">
-              <div class="pt-4 pb-3">
-                <?php foreach ($staff_pending as $r): ?>
-                <div style="border:1px solid #e9ecef;border-left:3px solid #ffc107;border-radius:10px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
-                  <div style="flex:1;min-width:0;">
-                    <div style="font-weight:600;font-size:14px;color:#1a1a2e;">
-                      <i class="fas fa-globe me-1 text-muted"></i><?= htmlspecialchars($r['browser'] ?: 'Unknown Browser') ?>
-                      &nbsp;·&nbsp;
-                      <i class="fas fa-desktop me-1 text-muted"></i><?= htmlspecialchars(get_os_name_staff($r['user_agent'] ?? '')) ?>
-                      <span style="font-size:11px;padding:2px 8px;border-radius:20px;background:#fff3cd;color:#856404;font-weight:500;margin-left:6px;"><?= strtoupper($r['user_type']) ?></span>
-                    </div>
-                    <div style="font-size:12px;color:#6c757d;margin-top:3px;">
-                      <i class="fas fa-user me-1"></i><?= htmlspecialchars($r['username'] ?? 'Unknown') ?>
-                      &nbsp;·&nbsp;
-                      <i class="fas fa-network-wired me-1"></i><?= htmlspecialchars($r['ip_address']) ?>
-                      &nbsp;·&nbsp;
-                      <i class="fas fa-clock me-1"></i><?= date('M d, Y h:i A', strtotime($r['created_at'])) ?>
-                    </div>
-                  </div>
-                  <div class="d-flex gap-2 flex-shrink-0">
-                    <form method="POST">
-                      <input type="hidden" name="settings_action" value="approve_device">
-                      <input type="hidden" name="request_id" value="<?= $r['id'] ?>">
-                      <button type="submit" class="btn btn-sm btn-success"><i class="fas fa-check me-1"></i>Approve</button>
-                    </form>
-                    <form method="POST">
-                      <input type="hidden" name="settings_action" value="reject_device">
-                      <input type="hidden" name="request_id" value="<?= $r['id'] ?>">
-                      <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-times me-1"></i>Reject</button>
-                    </form>
-                  </div>
-                </div>
-                <?php endforeach; ?>
-              </div>
-            </div>
-          </div>
-          <?php endif; ?>
-
           <div class="card border-0 shadow-sm mb-3" style="border-radius:12px;overflow:hidden;">
             <div class="card-header bg-white border-0 d-flex align-items-center justify-content-between px-4 py-3" style="cursor:pointer;" onclick="toggleStaffSection('pw')">
               <div class="d-flex align-items-center gap-3">
@@ -387,7 +243,7 @@ $staff_pending = $pdo->query("
             </div>
           </div>
 
-          <div class="card border-0 shadow-sm mb-3" style="border-radius:12px;overflow:hidden;">
+          <div class="card border-0 shadow-sm" style="border-radius:12px;overflow:hidden;">
             <div class="card-header bg-white border-0 d-flex align-items-center justify-content-between px-4 py-3" style="cursor:pointer;" onclick="toggleStaffSection('sq')">
               <div class="d-flex align-items-center gap-3">
                 <div style="width:40px;height:40px;border-radius:10px;background:rgba(25,135,84,.1);display:flex;align-items:center;justify-content:center;color:#198754;font-size:16px;">
@@ -485,60 +341,6 @@ $staff_pending = $pdo->query("
             </div>
           </div>
 
-          <div class="card border-0 shadow-sm" style="border-radius:12px;overflow:hidden;">
-            <div class="card-header bg-white border-0 d-flex align-items-center justify-content-between px-4 py-3" style="cursor:pointer;" onclick="toggleStaffSection('dev')">
-              <div class="d-flex align-items-center gap-3">
-                <div style="width:40px;height:40px;border-radius:10px;background:rgba(13,202,240,.1);display:flex;align-items:center;justify-content:center;color:#0dcaf0;font-size:16px;">
-                  <i class="fas fa-laptop"></i>
-                </div>
-                <div>
-                  <div style="font-weight:600;font-size:15px;color:#1a1a2e;">Trusted Devices</div>
-                  <div style="font-size:12px;color:#6c757d;"><?= count($staff_devices) ?> device<?= count($staff_devices) !== 1 ? 's' : '' ?> approved</div>
-                </div>
-              </div>
-              <i class="fas fa-chevron-down text-muted small" id="staff-chev-dev" style="transition:transform .25s;"></i>
-            </div>
-            <div style="height:1px;background:#f0f0f0;margin:0 22px;"></div>
-            <div id="staff-body-dev" style="max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease;padding:0 22px;">
-              <div class="pt-4 pb-3">
-                <?php if (empty($staff_devices)): ?>
-                <p class="text-muted small">No trusted devices yet.</p>
-                <?php else: ?>
-                <?php foreach ($staff_devices as $d):
-                    $is_cur = $d['device_hash'] === $cur_hash;
-                ?>
-                <div style="border:1px solid <?= $is_cur ? '#0d6efd' : '#e9ecef' ?>;background:<?= $is_cur ? '#f0f5ff' : '#fff' ?>;border-radius:10px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
-                  <div style="flex:1;min-width:0;">
-                    <div style="font-weight:600;font-size:14px;color:#1a1a2e;">
-                      <i class="fas fa-globe me-1 text-muted"></i><?= htmlspecialchars(get_browser_name_staff($d['user_agent'])) ?>
-                      &nbsp;·&nbsp;
-                      <i class="fas fa-desktop me-1 text-muted"></i><?= htmlspecialchars(get_os_name_staff($d['user_agent'])) ?>
-                      <?php if ($is_cur): ?>
-                      <span style="font-size:11px;padding:2px 8px;border-radius:20px;background:#e8f4fd;color:#0d6efd;font-weight:500;margin-left:6px;">This device</span>
-                      <?php endif; ?>
-                    </div>
-                    <div style="font-size:12px;color:#6c757d;margin-top:3px;">
-                      <i class="fas fa-network-wired me-1"></i><?= htmlspecialchars($d['ip_address']) ?>
-                      &nbsp;·&nbsp;
-                      <i class="fas fa-clock me-1"></i><?= date('M d, Y h:i A', strtotime($d['created_at'])) ?>
-                    </div>
-                  </div>
-                  <?php if (!$is_cur): ?>
-                  <form method="POST" onsubmit="return confirm('Remove this device?')">
-                    <input type="hidden" name="settings_action" value="remove_device">
-                    <input type="hidden" name="device_id" value="<?= $d['id'] ?>">
-                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
-                  </form>
-                  <?php else: ?>
-                  <i class="fas fa-shield-halved text-primary"></i>
-                  <?php endif; ?>
-                </div>
-                <?php endforeach; ?>
-                <?php endif; ?>
-              </div>
-            </div>
-          </div>
-
         </div>
       </div>
     </div>
@@ -581,8 +383,6 @@ if ($settings_open_section === 'sq' || $sq_confirm_mode) {
     $open_js = 'sq';
 } elseif ($settings_open_section === 'pw' || $settings_success || $settings_error) {
     $open_js = 'pw';
-} elseif (!empty($staff_pending)) {
-    $open_js = 'pending';
 }
 ?>
 <?php if ($open_js): ?>

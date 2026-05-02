@@ -1,0 +1,19 @@
+crontab -e
+
+* * * * * flock -n /tmp/backup.lock /home/michael/auto_export.sh
+
+* * * * * /home/michael/auto_export.sh
+* * * * * sleep 15 && /home/michael/auto_export.sh
+* * * * * sleep 30 && /home/michael/auto_export.sh
+* * * * * sleep 45 && /home/michael/auto_export.sh
+
+* * * * * flock -n /tmp/backup.lock /bin/bash /home/michael/auto_export.sh
+
+* * * * * /bin/bash /home/michael/auto_export.sh >> /home/michael/backup.log 2>&1
+
+ls /home/michael/backups/
+
+* * * * * /bin/bash /home/michael/auto_export.sh >> /home/michael/backup.log 2>&1
+
+
+* * * * * flock -n /tmp/backup.lock /bin/bash /home/black/auto_export.sh
