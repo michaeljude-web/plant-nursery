@@ -1,8 +1,4 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-session_start();
 require_once 'config/config.php';
 
 if (!empty($_SESSION['admin_logged_in'])) {
@@ -14,21 +10,15 @@ if (!empty($_SESSION['staff_logged_in'])) {
     exit();
 }
 
-function is_safe_input($val) {
-    $blocked = ["'", '"', ';', '--', '#', '/*', '*/', 'SELECT', 'INSERT', 'UPDATE',
-                'DELETE', 'DROP', 'UNION', 'OR ', 'AND ', '<script', '</script',
-                '<', '>', '\\', '/', '=', '%', '&', '|', '`', 'EXEC', 'CAST',
-                'CHAR(', 'alert(', 'onerror', 'onload'];
-    $upper = strtoupper($val);
-    foreach ($blocked as $b) {
-        if (str_contains($upper, strtoupper($b))) return false;
+function is_safe_input($val, $mode = 'alnum') {
+    if ($mode === 'alnumspace') {
+        return preg_match('/^[a-zA-Z0-9 ]+$/', $val) === 1;
     }
-    return true;
+    return preg_match('/^[a-zA-Z0-9]+$/', $val) === 1;
 }
 
 $step  = (int)($_SESSION['fp_step'] ?? 1);
 $error = '';
-$info  = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
@@ -36,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $username = trim($_POST['username'] ?? '');
 
         if (!is_safe_input($username) || empty($username)) {
-            $error = 'Invalid username.';
+            $error = 'Invalid username. Only letters and numbers allowed.';
         } else {
             $found_id   = null;
             $found_type = null;
@@ -89,8 +79,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $answer = trim($_POST['sq_answer'] ?? '');
 
-        if (empty($answer)) {
-            $error = 'Please enter your answer.';
+        if (empty($answer) || !is_safe_input($answer, 'alnumspace')) {
+            $error = 'Invalid answer. Only letters, numbers and spaces allowed.';
             $step  = 2;
         } else {
             $s = $pdo->prepare("SELECT answer_hash FROM security_answer WHERE user_id = ? AND user_type = ?");
@@ -119,13 +109,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $confirm = $_POST['confirm_password'] ?? '';
 
         if (!is_safe_input($new) || !is_safe_input($confirm)) {
-            $error = 'Invalid characters detected in input.';
+            $error = 'Invalid characters in password. Only letters and numbers allowed.';
             $step  = 3;
         } elseif (empty($new)) {
             $error = 'New password cannot be empty.';
             $step  = 3;
-        } elseif (strlen($new) < 6) {
-            $error = 'Password must be at least 6 characters.';
+        } elseif (strlen($new) < 4) {
+            $error = 'Password must be at least 4 characters.';
             $step  = 3;
         } elseif ($new !== $confirm) {
             $error = 'Passwords do not match.';
@@ -182,8 +172,23 @@ $fp_username = $_SESSION['fp_username'] ?? '';
 <link rel="stylesheet" href="/plant/assets/vendor/bootstrap-5/css/bootstrap.min.css">
 <link rel="stylesheet" href="/plant/assets/vendor/fontawesome-7/css/all.min.css">
 <style>
-.blocked-hint { font-size:11px; color:#dc3545; margin-top:4px; display:none; }
-.blocked-hint.show { display:block; }
+.invalid-feedback-custom {
+    font-size: 11px;
+    color: #dc3545;
+    margin-top: 4px;
+    display: none;
+}
+.invalid-feedback-custom.show {
+    display: block;
+}
+input.is-invalid-custom {
+    border-color: #dc3545 !important;
+    box-shadow: 0 0 0 0.2rem rgba(220,53,69,.15) !important;
+}
+button:disabled {
+    cursor: not-allowed !important;
+    opacity: 0.65;
+}
 .step-indicator { display:flex; align-items:center; gap:0; margin-bottom:28px; }
 .step-dot { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex-shrink:0; }
 .step-dot.done { background:#198754; color:#fff; }
@@ -228,7 +233,7 @@ $fp_username = $_SESSION['fp_username'] ?? '';
 
     <?php if ($step === 1): ?>
     <p class="small text-muted mb-3">Enter your username to get started.</p>
-    <form method="POST" autocomplete="off" novalidate>
+    <form method="POST" autocomplete="off" novalidate id="step1-form">
       <div class="mb-4">
         <label class="form-label small fw-semibold text-secondary">Username</label>
         <div class="input-group">
@@ -237,9 +242,9 @@ $fp_username = $_SESSION['fp_username'] ?? '';
             id="fp_username" maxlength="50" required autofocus
             value="<?= htmlspecialchars($_POST['username'] ?? '') ?>">
         </div>
-        <div class="blocked-hint" id="hint-username"><i class="fas fa-triangle-exclamation me-1"></i> Special characters are not allowed.</div>
+        <div class="invalid-feedback-custom" id="hint-username">Only letters and numbers allowed.</div>
       </div>
-      <button type="submit" name="fp_step1" class="btn btn-primary w-100 fw-semibold">
+      <button type="submit" name="fp_step1" class="btn btn-primary w-100 fw-semibold" id="step1-btn">
         <i class="fas fa-arrow-right me-2"></i>Continue
       </button>
     </form>
@@ -250,7 +255,7 @@ $fp_username = $_SESSION['fp_username'] ?? '';
       <div style="font-size:12px;color:#6c757d;margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Security Question</div>
       <div style="font-size:14px;color:#1a1a2e;font-weight:500;"><?= htmlspecialchars($fp_question) ?></div>
     </div>
-    <form method="POST" autocomplete="off" novalidate>
+    <form method="POST" autocomplete="off" novalidate id="step2-form">
       <div class="mb-4">
         <label class="form-label small fw-semibold text-secondary">Your Answer</label>
         <div class="input-group">
@@ -258,10 +263,10 @@ $fp_username = $_SESSION['fp_username'] ?? '';
           <input type="text" name="sq_answer" class="form-control border-start-0 ps-0"
             id="fp_answer" maxlength="100" required autofocus autocomplete="off">
         </div>
-        <div class="blocked-hint" id="hint-answer"><i class="fas fa-triangle-exclamation me-1"></i> Special characters are not allowed.</div>
+        <div class="invalid-feedback-custom" id="hint-answer">Only letters, numbers and spaces allowed.</div>
         <div style="font-size:11px;color:#6c757d;margin-top:5px;"><i class="fas fa-info-circle me-1"></i>Answer is case-insensitive.</div>
       </div>
-      <button type="submit" name="fp_step2" class="btn btn-primary w-100 fw-semibold mb-2">
+      <button type="submit" name="fp_step2" class="btn btn-primary w-100 fw-semibold mb-2" id="step2-btn">
         <i class="fas fa-arrow-right me-2"></i>Verify Answer
       </button>
       <button type="submit" name="fp_back" value="1" class="btn btn-outline-secondary w-100 btn-sm">
@@ -271,7 +276,7 @@ $fp_username = $_SESSION['fp_username'] ?? '';
 
     <?php elseif ($step === 3): ?>
     <p class="small text-muted mb-3">Set a new password for <strong><?= htmlspecialchars($fp_username) ?></strong>.</p>
-    <form method="POST" autocomplete="off" novalidate>
+    <form method="POST" autocomplete="off" novalidate id="step3-form">
       <div class="mb-3">
         <label class="form-label small fw-semibold text-secondary">New Password</label>
         <div class="input-group">
@@ -282,7 +287,7 @@ $fp_username = $_SESSION['fp_username'] ?? '';
             <i class="fas fa-eye text-secondary small" id="eye1"></i>
           </button>
         </div>
-        <div class="blocked-hint" id="hint-new"><i class="fas fa-triangle-exclamation me-1"></i> Special characters are not allowed.</div>
+        <div class="invalid-feedback-custom" id="hint-new">Only letters and numbers allowed.</div>
       </div>
       <div class="mb-4">
         <label class="form-label small fw-semibold text-secondary">Confirm New Password</label>
@@ -294,9 +299,9 @@ $fp_username = $_SESSION['fp_username'] ?? '';
             <i class="fas fa-eye text-secondary small" id="eye2"></i>
           </button>
         </div>
-        <div class="blocked-hint" id="hint-confirm"><i class="fas fa-triangle-exclamation me-1"></i> Special characters are not allowed.</div>
+        <div class="invalid-feedback-custom" id="hint-confirm">Only letters and numbers allowed.</div>
       </div>
-      <button type="submit" name="fp_step3" class="btn btn-success w-100 fw-semibold mb-2">
+      <button type="submit" name="fp_step3" class="btn btn-success w-100 fw-semibold mb-2" id="step3-btn">
         <i class="fas fa-key me-2"></i>Reset Password
       </button>
       <button type="submit" name="fp_back" value="2" class="btn btn-outline-secondary w-100 btn-sm">
@@ -318,40 +323,126 @@ function toggleFpPw(inputId, iconId) {
     icon.className = show ? 'fas fa-eye-slash text-secondary small' : 'fas fa-eye text-secondary small';
 }
 
-const blocked = ["'", '"', ';', '--', '<', '>', '\\', '=', '`', '|', '&', '%', '#', '/'];
-function stripBlocked(val) {
-    let out = val;
-    blocked.forEach(c => { out = out.split(c).join(''); });
-    return out;
-}
-function attachGuard(inputId, hintId) {
-    const input = document.getElementById(inputId);
-    const hint  = document.getElementById(hintId);
-    if (!input || !hint) return;
-    input.addEventListener('input', function() {
-        const orig    = this.value;
-        const cleaned = stripBlocked(orig);
-        if (cleaned !== orig) {
-            this.value = cleaned;
-            hint.classList.add('show');
-            setTimeout(() => hint.classList.remove('show'), 2000);
+(function() {
+    const usernameInput = document.getElementById('fp_username');
+    const usernameHint  = document.getElementById('hint-username');
+    const step1Btn      = document.getElementById('step1-btn');
+    const alnumRegex    = /^[a-zA-Z0-9]*$/;
+
+    function validateUsername() {
+        if (!usernameInput || !usernameHint) return;
+        const val = usernameInput.value;
+        const valid = alnumRegex.test(val);
+        if (!valid) {
+            usernameHint.classList.add('show');
+            usernameInput.classList.add('is-invalid-custom');
+        } else {
+            usernameHint.classList.remove('show');
+            usernameInput.classList.remove('is-invalid-custom');
         }
-    });
-    input.addEventListener('paste', function(e) {
-        e.preventDefault();
-        let text    = (e.clipboardData || window.clipboardData).getData('text');
-        const clean = stripBlocked(text);
-        this.value += clean;
-        if (clean !== text) {
-            hint.classList.add('show');
-            setTimeout(() => hint.classList.remove('show'), 2000);
+        if (step1Btn) step1Btn.disabled = !valid || val.length === 0;
+    }
+    if (usernameInput) {
+        usernameInput.addEventListener('input', validateUsername);
+        usernameInput.addEventListener('paste', function(e) {
+            e.preventDefault();
+            let text = (e.clipboardData || window.clipboardData).getData('text');
+            text = text.replace(/[^a-zA-Z0-9]/g, '');
+            usernameInput.value += text;
+            validateUsername();
+        });
+    }
+})();
+
+(function() {
+    const answerInput = document.getElementById('fp_answer');
+    const answerHint  = document.getElementById('hint-answer');
+    const step2Btn    = document.getElementById('step2-btn');
+    const spaceRegex  = /^[a-zA-Z0-9 ]*$/;
+
+    function validateAnswer() {
+        if (!answerInput || !answerHint) return;
+        const val = answerInput.value;
+        const valid = spaceRegex.test(val);
+        if (!valid) {
+            answerHint.classList.add('show');
+            answerInput.classList.add('is-invalid-custom');
+        } else {
+            answerHint.classList.remove('show');
+            answerInput.classList.remove('is-invalid-custom');
         }
-    });
-}
-attachGuard('fp_username', 'hint-username');
-attachGuard('fp_answer',   'hint-answer');
-attachGuard('fp_new_pw',   'hint-new');
-attachGuard('fp_confirm_pw', 'hint-confirm');
+        if (step2Btn) step2Btn.disabled = !valid || val.trim().length === 0;
+    }
+    if (answerInput) {
+        answerInput.addEventListener('input', validateAnswer);
+        answerInput.addEventListener('paste', function(e) {
+            e.preventDefault();
+            let text = (e.clipboardData || window.clipboardData).getData('text');
+            text = text.replace(/[^a-zA-Z0-9 ]/g, '');
+            answerInput.value += text;
+            validateAnswer();
+        });
+    }
+})();
+
+(function() {
+    const newPw      = document.getElementById('fp_new_pw');
+    const confirmPw  = document.getElementById('fp_confirm_pw');
+    const newHint    = document.getElementById('hint-new');
+    const confirmHint = document.getElementById('hint-confirm');
+    const step3Btn   = document.getElementById('step3-btn');
+    const alnumRegex  = /^[a-zA-Z0-9]*$/;
+
+    function validatePasswordField(input, hint) {
+        if (!input || !hint) return false;
+        const val = input.value;
+        const valid = val.length === 0 || alnumRegex.test(val);
+        if (!valid) {
+            hint.classList.add('show');
+            input.classList.add('is-invalid-custom');
+        } else {
+            hint.classList.remove('show');
+            input.classList.remove('is-invalid-custom');
+        }
+        return valid;
+    }
+
+    function toggleStep3Button() {
+        if (!step3Btn) return;
+        const newValid = newPw ? alnumRegex.test(newPw.value) && newPw.value.length > 0 : false;
+        const confirmValid = confirmPw ? alnumRegex.test(confirmPw.value) && confirmPw.value.length > 0 : false;
+        step3Btn.disabled = !(newValid && confirmValid);
+    }
+
+    if (newPw) {
+        newPw.addEventListener('input', function() {
+            validatePasswordField(newPw, newHint);
+            toggleStep3Button();
+        });
+        newPw.addEventListener('paste', function(e) {
+            e.preventDefault();
+            let text = (e.clipboardData || window.clipboardData).getData('text');
+            text = text.replace(/[^a-zA-Z0-9]/g, '');
+            newPw.value += text;
+            validatePasswordField(newPw, newHint);
+            toggleStep3Button();
+        });
+    }
+    if (confirmPw) {
+        confirmPw.addEventListener('input', function() {
+            validatePasswordField(confirmPw, confirmHint);
+            toggleStep3Button();
+        });
+        confirmPw.addEventListener('paste', function(e) {
+            e.preventDefault();
+            let text = (e.clipboardData || window.clipboardData).getData('text');
+            text = text.replace(/[^a-zA-Z0-9]/g, '');
+            confirmPw.value += text;
+            validatePasswordField(confirmPw, confirmHint);
+            toggleStep3Button();
+        });
+    }
+})();
 </script>
 </body>
 </html>

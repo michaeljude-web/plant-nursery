@@ -1,39 +1,13 @@
 <?php
 require_once __DIR__ . '/../../config/config.php';
 
-if (!defined('STAFF_ENC_KEY')) {
-    define('STAFF_ENC_KEY',    'xK#9mP$2vL@nQ8zR!dW6sY&4bT*1jF0e');
-    define('STAFF_ENC_METHOD', 'AES-256-CBC');
-}
-
-if (!function_exists('dec_staff')) {
-    function dec_staff($data) {
-        if ($data === null || $data === '') return '';
-        $decoded = base64_decode($data);
-        if (strlen($decoded) < 16) return $data;
-        $iv     = substr($decoded, 0, 16);
-        $result = openssl_decrypt(base64_encode(substr($decoded, 16)), STAFF_ENC_METHOD, STAFF_ENC_KEY, 0, $iv);
-        return $result !== false ? $result : $data;
-    }
-}
-
-$staff_display_name = trim(
-    dec_staff($_SESSION['staff_firstname'] ?? '') . ' ' .
-    dec_staff($_SESSION['staff_lastname']  ?? '')
-);
-
 $staff_id = $_SESSION['staff_id'];
 
-function is_safe_staff($val) {
-    $blocked = ["'", '"', ';', '--', '#', '/*', '*/', 'SELECT', 'INSERT', 'UPDATE',
-                'DELETE', 'DROP', 'UNION', 'OR ', 'AND ', '<script', '</script',
-                '<', '>', '\\', '/', '=', '%', '&', '|', '`', 'EXEC', 'CAST',
-                'CHAR(', 'alert(', 'onerror', 'onload'];
-    $upper = strtoupper($val);
-    foreach ($blocked as $b) {
-        if (str_contains($upper, strtoupper($b))) return false;
-    }
-    return true;
+function is_safe_password($val) {
+    return preg_match('/^[a-zA-Z0-9]+$/', $val) === 1;
+}
+function is_safe_answer($val) {
+    return preg_match('/^[a-zA-Z0-9 ]+$/', $val) === 1;
 }
 
 $settings_success   = $settings_error = '';
@@ -59,8 +33,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['settings_action'])) {
         $stmt->execute([$staff_id]);
         $staff = $stmt->fetch();
 
-        if (!is_safe_staff($current) || !is_safe_staff($new) || !is_safe_staff($confirm)) {
-            $settings_error = 'Invalid characters detected in input.';
+        if (!is_safe_password($current) || !is_safe_password($new) || !is_safe_password($confirm)) {
+            $settings_error = 'Invalid characters in password. Only letters and numbers allowed.';
         } elseif (!password_verify($current, $staff['password'])) {
             $settings_error = 'Current password is incorrect.';
         } elseif (empty($new)) {
@@ -84,6 +58,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['settings_action'])) {
             $sq_error = 'Please select a security question.';
         } elseif (empty($answer)) {
             $sq_error = 'Answer cannot be empty.';
+        } elseif (!is_safe_answer($answer)) {
+            $sq_error = 'Invalid answer. Only letters, numbers and spaces allowed.';
         } elseif (strlen($answer) < 2) {
             $sq_error = 'Answer is too short.';
         } else {
@@ -110,19 +86,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['settings_action'])) {
         $settings_open_section = 'sq';
         $current_pw = $_POST['confirm_password_reset'] ?? '';
 
-        $stmt = $pdo->prepare("SELECT password FROM staff_info WHERE staff_id = ?");
-        $stmt->execute([$staff_id]);
-        $staff_row = $stmt->fetch();
-
-        if (!password_verify($current_pw, $staff_row['password'])) {
-            $sq_error        = 'Incorrect password. Reset cancelled.';
-            $sq_confirm_mode = false;
+        if (!is_safe_password($current_pw)) {
+            $sq_error = 'Invalid password. Only letters and numbers allowed.';
+            $sq_confirm_mode = true;
         } else {
-            $pdo->prepare("DELETE FROM security_answer WHERE user_id = ? AND user_type = 'staff'")
-                ->execute([$staff_id]);
-            $existing_sq     = null;
-            $sq_success      = 'Security question has been reset. Please set a new one.';
-            $sq_confirm_mode = false;
+            $stmt = $pdo->prepare("SELECT password FROM staff_info WHERE staff_id = ?");
+            $stmt->execute([$staff_id]);
+            $staff_row = $stmt->fetch();
+
+            if (!password_verify($current_pw, $staff_row['password'])) {
+                $sq_error        = 'Incorrect password. Reset cancelled.';
+                $sq_confirm_mode = false;
+            } else {
+                $pdo->prepare("DELETE FROM security_answer WHERE user_id = ? AND user_type = 'staff'")
+                    ->execute([$staff_id]);
+                $existing_sq     = null;
+                $sq_success      = 'Security question has been reset. Please set a new one.';
+                $sq_confirm_mode = false;
+            }
         }
     }
 }
@@ -160,8 +141,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['settings_action'])) {
         </li>
       </ul>
       <div class="dropdown">
-        <button class="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown">
-          <i class="fas fa-user me-1"></i><?= htmlspecialchars($staff_display_name) ?>
+        <button class="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown" title="Account">
+          <i class="fas fa-user"></i>
         </button>
         <ul class="dropdown-menu dropdown-menu-end">
           <li>
@@ -214,7 +195,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['settings_action'])) {
                 <?php elseif ($settings_open_section === 'pw' && $settings_success): ?>
                 <div class="alert alert-success py-2 small border-0 rounded-3 mb-3"><i class="fas fa-check-circle me-1"></i><?= htmlspecialchars($settings_success) ?></div>
                 <?php endif; ?>
-                <form method="POST">
+                <form method="POST" id="passwordForm">
                   <input type="hidden" name="settings_action" value="change_password">
                   <div class="mb-3">
                     <label style="font-size:12px;font-weight:600;color:#6c757d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;display:block;">Current Password</label>
@@ -222,6 +203,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['settings_action'])) {
                       <input type="password" name="current_password" class="form-control" style="border-radius:8px 0 0 8px;border:1.5px solid #e2e8f0;font-size:14px;" required>
                       <button type="button" class="btn btn-outline-secondary" style="border-radius:0 8px 8px 0;border:1.5px solid #e2e8f0;" onclick="toggleStaffPw('current_password',this)"><i class="fas fa-eye fa-sm"></i></button>
                     </div>
+                    <div class="invalid-feedback-custom" id="hint-current-pw"></div>
                   </div>
                   <div class="mb-3">
                     <label style="font-size:12px;font-weight:600;color:#6c757d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;display:block;">New Password</label>
@@ -229,6 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['settings_action'])) {
                       <input type="password" name="new_password" class="form-control" style="border-radius:8px 0 0 8px;border:1.5px solid #e2e8f0;font-size:14px;" required>
                       <button type="button" class="btn btn-outline-secondary" style="border-radius:0 8px 8px 0;border:1.5px solid #e2e8f0;" onclick="toggleStaffPw('new_password',this)"><i class="fas fa-eye fa-sm"></i></button>
                     </div>
+                    <div class="invalid-feedback-custom" id="hint-new-pw"></div>
                   </div>
                   <div class="mb-4">
                     <label style="font-size:12px;font-weight:600;color:#6c757d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;display:block;">Confirm New Password</label>
@@ -236,8 +219,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['settings_action'])) {
                       <input type="password" name="confirm_password" class="form-control" style="border-radius:8px 0 0 8px;border:1.5px solid #e2e8f0;font-size:14px;" required>
                       <button type="button" class="btn btn-outline-secondary" style="border-radius:0 8px 8px 0;border:1.5px solid #e2e8f0;" onclick="toggleStaffPw('confirm_password',this)"><i class="fas fa-eye fa-sm"></i></button>
                     </div>
+                    <div class="invalid-feedback-custom" id="hint-confirm-pw"></div>
                   </div>
-                  <button type="submit" class="btn btn-primary" style="border-radius:8px;padding:9px 20px;font-size:14px;"><i class="fas fa-save me-1"></i> Update Password</button>
+                  <button type="submit" class="btn btn-primary" id="updatePasswordBtn" style="border-radius:8px;padding:9px 20px;font-size:14px;"><i class="fas fa-save me-1"></i> Update Password</button>
                 </form>
               </div>
             </div>
@@ -297,17 +281,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['settings_action'])) {
                   <div style="font-weight:600;font-size:13px;color:#92400e;margin-bottom:4px;"><i class="fas fa-triangle-exclamation me-1"></i> Confirm your identity</div>
                   <div style="font-size:12px;color:#6c757d;">Enter your current password to reset your security question.</div>
                 </div>
-                <form method="POST">
+                <form method="POST" id="resetSqForm">
                   <input type="hidden" name="settings_action" value="confirm_reset_sq">
                   <div class="mb-3">
                     <label style="font-size:12px;font-weight:600;color:#6c757d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;display:block;">Current Password</label>
                     <div class="input-group">
-                      <input type="password" name="confirm_password_reset" class="form-control" style="border-radius:8px 0 0 8px;border:1.5px solid #e2e8f0;font-size:14px;" required autofocus>
+                      <input type="password" name="confirm_password_reset" class="form-control" id="confirm_password_reset" style="border-radius:8px 0 0 8px;border:1.5px solid #e2e8f0;font-size:14px;" required autofocus>
                       <button type="button" class="btn btn-outline-secondary" style="border-radius:0 8px 8px 0;border:1.5px solid #e2e8f0;" onclick="toggleStaffPw('confirm_password_reset',this)"><i class="fas fa-eye fa-sm"></i></button>
                     </div>
+                    <div class="invalid-feedback-custom" id="hint-reset-pw"></div>
                   </div>
                   <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-danger" style="border-radius:8px;padding:9px 20px;font-size:14px;">
+                    <button type="submit" class="btn btn-danger" id="confirmResetBtn" style="border-radius:8px;padding:9px 20px;font-size:14px;">
                       <i class="fas fa-trash me-1"></i> Confirm Reset
                     </button>
                     <button type="button" class="btn btn-outline-secondary" style="border-radius:8px;padding:9px 20px;font-size:14px;" data-bs-dismiss="modal">Cancel</button>
@@ -315,7 +300,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['settings_action'])) {
                 </form>
 
                 <?php else: ?>
-                <form method="POST">
+                <form method="POST" id="sqForm">
                   <input type="hidden" name="settings_action" value="set_security_question">
                   <div class="mb-3">
                     <label style="font-size:12px;font-weight:600;color:#6c757d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;display:block;">Security Question</label>
@@ -328,10 +313,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['settings_action'])) {
                   </div>
                   <div class="mb-4">
                     <label style="font-size:12px;font-weight:600;color:#6c757d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;display:block;">Your Answer</label>
-                    <input type="text" name="sq_answer" class="form-control" style="border-radius:8px;border:1.5px solid #e2e8f0;font-size:14px;" placeholder="Enter your answer" required autocomplete="off">
+                    <input type="text" name="sq_answer" class="form-control" id="sq_answer" style="border-radius:8px;border:1.5px solid #e2e8f0;font-size:14px;" placeholder="Enter your answer" required autocomplete="off">
+                    <div class="invalid-feedback-custom" id="hint-sq-answer"></div>
                     <div style="font-size:11px;color:#6c757d;margin-top:5px;"><i class="fas fa-info-circle me-1"></i>Answer is case-insensitive and stored securely.</div>
                   </div>
-                  <button type="submit" class="btn btn-success" style="border-radius:8px;padding:9px 20px;font-size:14px;">
+                  <button type="submit" class="btn btn-success" id="saveSqBtn" style="border-radius:8px;padding:9px 20px;font-size:14px;">
                     <i class="fas fa-save me-1"></i> Save Security Question
                   </button>
                 </form>
@@ -349,6 +335,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['settings_action'])) {
 
 <style>
 #staffSettingsModal .modal-header { padding: 14px 24px; }
+.invalid-feedback-custom {
+    font-size: 11px;
+    color: #dc3545;
+    margin-top: 4px;
+    display: none;
+}
+.invalid-feedback-custom.show {
+    display: block;
+}
+input.is-invalid-custom {
+    border-color: #dc3545 !important;
+    box-shadow: 0 0 0 0.2rem rgba(220,53,69,.15) !important;
+}
+button:disabled {
+    cursor: not-allowed !important;
+    opacity: 0.65;
+}
 </style>
 
 <script>
@@ -393,18 +396,84 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 <?php endif; ?>
 
-const blockedChars = ["'", '"', ';', '--', '<', '>', '\\', '=', '`', '|', '&', '%', '#', '/'];
-document.querySelectorAll('#staffSettingsModal input[type=text], #staffSettingsModal input[type=password]').forEach(input => {
-    input.addEventListener('input', function() {
-        let v = this.value;
-        blockedChars.forEach(c => { v = v.split(c).join(''); });
-        if (v !== this.value) this.value = v;
-    });
-    input.addEventListener('paste', function(e) {
-        e.preventDefault();
-        let t = (e.clipboardData || window.clipboardData).getData('text');
-        blockedChars.forEach(c => { t = t.split(c).join(''); });
-        this.value += t;
-    });
-});
+(function() {
+    const alnumRegex = /^[a-zA-Z0-9]*$/;
+    const answerRegex = /^[a-zA-Z0-9 ]*$/;
+
+    function setFieldValidation(input, hint, regex, errorMsg) {
+        if (!input || !hint) return false;
+        function validate() {
+            const val = input.value;
+            const valid = val === '' || regex.test(val);
+            if (!valid) {
+                hint.textContent = errorMsg;
+                hint.classList.add('show');
+                input.classList.add('is-invalid-custom');
+            } else {
+                hint.classList.remove('show');
+                input.classList.remove('is-invalid-custom');
+            }
+            return valid;
+        }
+        input.addEventListener('input', validate);
+        input.addEventListener('paste', function(e) {
+            e.preventDefault();
+            let text = (e.clipboardData || window.clipboardData).getData('text');
+            text = text.split('').filter(ch => regex.test(ch)).join('');
+            input.value += text;
+            validate();
+        });
+        return validate;
+    }
+
+    const currentPw = document.querySelector('input[name="current_password"]');
+    const newPw     = document.querySelector('input[name="new_password"]');
+    const confirmPw = document.querySelector('input[name="confirm_password"]');
+    const hintCur   = document.getElementById('hint-current-pw');
+    const hintNew   = document.getElementById('hint-new-pw');
+    const hintCon   = document.getElementById('hint-confirm-pw');
+    const updateBtn = document.getElementById('updatePasswordBtn');
+
+    let validCur = true, validNew = true, validCon = true;
+    if (currentPw && hintCur) {
+        const v = setFieldValidation(currentPw, hintCur, alnumRegex, 'Only letters and numbers allowed. No spaces.');
+        currentPw.addEventListener('input', () => { validCur = v(); toggleUpdateBtn(); });
+    }
+    if (newPw && hintNew) {
+        const v = setFieldValidation(newPw, hintNew, alnumRegex, 'Only letters and numbers allowed. No spaces.');
+        newPw.addEventListener('input', () => { validNew = v(); toggleUpdateBtn(); });
+    }
+    if (confirmPw && hintCon) {
+        const v = setFieldValidation(confirmPw, hintCon, alnumRegex, 'Only letters and numbers allowed. No spaces.');
+        confirmPw.addEventListener('input', () => { validCon = v(); toggleUpdateBtn(); });
+    }
+
+    function toggleUpdateBtn() {
+        if (updateBtn) {
+            updateBtn.disabled = !(validCur && validNew && validCon && currentPw.value.length > 0 && newPw.value.length > 0 && confirmPw.value.length > 0);
+        }
+    }
+
+    const resetPwInput = document.getElementById('confirm_password_reset');
+    const resetPwHint  = document.getElementById('hint-reset-pw');
+    const confirmResetBtn = document.getElementById('confirmResetBtn');
+    if (resetPwInput && resetPwHint) {
+        const v = setFieldValidation(resetPwInput, resetPwHint, alnumRegex, 'Only letters and numbers allowed. No spaces.');
+        resetPwInput.addEventListener('input', () => {
+            const valid = v();
+            if (confirmResetBtn) confirmResetBtn.disabled = !valid || resetPwInput.value.length === 0;
+        });
+    }
+
+    const sqAnswer = document.getElementById('sq_answer');
+    const sqHint   = document.getElementById('hint-sq-answer');
+    const saveSqBtn = document.getElementById('saveSqBtn');
+    if (sqAnswer && sqHint) {
+        const v = setFieldValidation(sqAnswer, sqHint, answerRegex, 'Only letters, numbers and spaces allowed.');
+        sqAnswer.addEventListener('input', () => {
+            const valid = v();
+            if (saveSqBtn) saveSqBtn.disabled = !valid || sqAnswer.value.trim().length === 0;
+        });
+    }
+})();
 </script>

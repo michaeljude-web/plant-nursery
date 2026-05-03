@@ -4,19 +4,21 @@ require_once __DIR__ . '/../config/config.php';
 require_staff_auth();
 
 if (!defined('STAFF_ENC_KEY')) {
-  define('STAFF_ENC_KEY',    'xK#9mP$2vL@nQ8zR!dW6sY&4bT*1jF0e');
-  define('STAFF_ENC_METHOD', 'AES-256-CBC');
+    define('STAFF_ENC_KEY',    'xK#9mP$2vL@nQ8zR!dW6sY&4bT*1jF0e');
+    define('STAFF_ENC_METHOD', 'AES-256-CBC');
 }
 if (!function_exists('dec_staff')) {
-  function dec_staff($data) {
-      if ($data === null || $data === '') return '';
-      $decoded = base64_decode($data);
-      if (strlen($decoded) < 16) return $data;
-      $iv     = substr($decoded, 0, 16);
-      $result = openssl_decrypt(base64_encode(substr($decoded, 16)), STAFF_ENC_METHOD, STAFF_ENC_KEY, 0, $iv);
-      return $result !== false ? $result : $data;
-  }
+    function dec_staff($data) {
+        if ($data === null || $data === '') return '';
+        $decoded = base64_decode($data);
+        if (strlen($decoded) < 16) return $data;
+        $iv         = substr($decoded, 0, 16);
+        $ciphertext = substr($decoded, 16);
+        $result     = openssl_decrypt($ciphertext, STAFF_ENC_METHOD, STAFF_ENC_KEY, 0, $iv);
+        return $result !== false ? $result : $data;
+    }
 }
+
 $staff_firstname = dec_staff($_SESSION['staff_firstname'] ?? '');
 
 $staff_id = $_SESSION['staff_id'];
@@ -32,13 +34,13 @@ $total_damage    = $total_damage->fetchColumn();
 
 $recent_orders = $pdo->prepare("
     SELECT o.ordered_at,
-           CONCAT(c.firstname,' ',c.lastname) as customer,
+           c.firstname, c.lastname,
            COUNT(oi.item_id) as item_count
     FROM orders o
     JOIN customer_info c ON o.customer_id = c.customer_id
     LEFT JOIN order_items oi ON o.order_id = oi.order_id
     WHERE o.staff_id = ?
-    GROUP BY o.order_id
+    GROUP BY o.order_id, c.firstname, c.lastname
     ORDER BY o.ordered_at DESC
     LIMIT 5
 ");
@@ -61,7 +63,6 @@ $recent_orders = $recent_orders->fetchAll();
 <div class="container-fluid px-4 py-4">
 
   <div class="mb-3">
-    <span class="fw-semibold text-dark">Welcome, <?= htmlspecialchars($staff_firstname) ?>!</span>
     <span class="text-muted small ms-2"><?= date('D, M d Y') ?></span>
   </div>
 
@@ -139,7 +140,9 @@ $recent_orders = $recent_orders->fetchAll();
           <?php else: ?>
           <?php foreach ($recent_orders as $o): ?>
           <tr>
-            <td class="ps-4 fw-semibold small"><?= htmlspecialchars($o['customer']) ?></td>
+            <td class="ps-4 fw-semibold small">
+              <?= htmlspecialchars(dec_staff($o['firstname']) . ' ' . dec_staff($o['lastname'])) ?>
+            </td>
             <td class="small text-muted"><?= $o['item_count'] ?> item<?= $o['item_count'] != 1 ? 's' : '' ?></td>
             <td class="small text-muted text-nowrap"><?= date('M d, Y h:i A', strtotime($o['ordered_at'])) ?></td>
           </tr>

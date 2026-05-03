@@ -41,15 +41,24 @@ if ($row && !$isBanned && $ban_until > 0) {
 }
 
 function is_safe_input($val) {
-    $blocked = ["'", '"', ';', '--', '#', '/*', '*/', 'SELECT', 'INSERT', 'UPDATE',
-                'DELETE', 'DROP', 'UNION', 'OR ', 'AND ', '<script', '</script',
-                '<', '>', '\\', '/', '=', '%', '&', '|', '`', 'EXEC', 'CAST',
-                'CHAR(', 'alert(', 'onerror', 'onload'];
-    $upper = strtoupper($val);
-    foreach ($blocked as $b) {
-        if (str_contains($upper, strtoupper($b))) return false;
+    return preg_match('/^[a-zA-Z0-9]+$/', $val) === 1;
+}
+
+if (!defined('STAFF_ENC_KEY')) {
+    define('STAFF_ENC_KEY',    'xK#9mP$2vL@nQ8zR!dW6sY&4bT*1jF0e');
+    define('STAFF_ENC_METHOD', 'AES-256-CBC');
+}
+
+if (!function_exists('dec_staff')) {
+    function dec_staff($data) {
+        if ($data === null || $data === '') return '';
+        $decoded = base64_decode($data);
+        if (strlen($decoded) < 16) return $data;
+        $iv         = substr($decoded, 0, 16);
+        $ciphertext = substr($decoded, 16);
+        $result = openssl_decrypt($ciphertext, STAFF_ENC_METHOD, STAFF_ENC_KEY, 0, $iv);
+        return $result !== false ? $result : $data;
     }
-    return true;
 }
 
 $error   = '';
@@ -60,7 +69,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isBanned) {
     $password = $_POST['password']     ?? '';
 
     if (!is_safe_input($username) || !is_safe_input($password)) {
-        $error = 'Invalid characters detected in input.';
+        $error = 'Invalid characters detected. Only letters and numbers allowed.';
+
+        $attempts++;
+        if ($attempts >= $MAX_ATTEMPTS) {
+            $ban_until = time() + $BAN_SECONDS;
+
+            $pdo->prepare("
+                INSERT INTO login_attempts (ip_address, device_hash, type, attempts, ban_until)
+                VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE attempts = ?, ban_until = ?
+            ")->execute([$ip, $device_hash, $type, $attempts, $ban_until, $attempts, $ban_until]);
+
+            header('Location: /plant/login.php');
+            exit();
+        } else {
+            $pdo->prepare("
+                INSERT INTO login_attempts (ip_address, device_hash, type, attempts, ban_until)
+                VALUES (?, ?, ?, ?, 0)
+                ON DUPLICATE KEY UPDATE attempts = ?
+            ")->execute([$ip, $device_hash, $type, $attempts, $attempts]);
+        }
     } elseif (empty($username) || empty($password)) {
         $error = 'Please fill in all fields.';
     } else {
@@ -96,8 +125,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isBanned) {
             $_SESSION['staff_logged_in']     = true;
             $_SESSION['staff_id']            = $staff['staff_id'];
             $_SESSION['staff_username']      = $staff['username'];
-            $_SESSION['staff_firstname']     = $staff['firstname'];
-            $_SESSION['staff_lastname']      = $staff['lastname'];
+            $_SESSION['staff_firstname']     = dec_staff($staff['firstname']);
+            $_SESSION['staff_lastname']      = dec_staff($staff['lastname']);
             $_SESSION['staff_last_activity'] = time();
 
             header('Location: /plant/staff/dashboard.php');
@@ -116,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isBanned) {
                 ON DUPLICATE KEY UPDATE attempts = ?, ban_until = ?
             ")->execute([$ip, $device_hash, $type, $attempts, $ban_until, $attempts, $ban_until]);
 
-            header('Location: /plant/login.php?banned=1');
+            header('Location: /plant/login.php');
             exit();
         } else {
             $error = 'Invalid username or password.';
@@ -139,8 +168,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isBanned) {
 <link rel="stylesheet" href="/plant/assets/vendor/bootstrap-5/css/bootstrap.min.css">
 <link rel="stylesheet" href="/plant/assets/vendor/fontawesome-7/css/all.min.css">
 <style>
-.blocked-hint { font-size:11px; color:#dc3545; margin-top:4px; display:none; }
-.blocked-hint.show { display:block; }
+.invalid-feedback-custom {
+    font-size: 11px;
+    color: #dc3545;
+    margin-top: 4px;
+    display: none;
+}
+.invalid-feedback-custom.show {
+    display: block;
+}
+input.is-invalid-custom {
+    border-color: #dc3545 !important;
+    box-shadow: 0 0 0 0.2rem rgba(220,53,69,.15) !important;
+}
+button:disabled {
+    cursor: not-allowed !important;
+    opacity: 0.65;
+}
 </style>
 </head>
 <body class="bg-light d-flex align-items-center justify-content-center" style="min-height:100vh;">
@@ -175,7 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isBanned) {
             <?= $isBanned ? 'disabled' : '' ?>
             value="<?= htmlspecialchars($_POST['username'] ?? '') ?>">
         </div>
-        <div class="blocked-hint" id="hint-username"><i class="fas fa-triangle-exclamation me-1"></i> Special characters are not allowed.</div>
+        <div class="invalid-feedback-custom" id="username-feedback">Only letters and numbers allowed.</div>
       </div>
 
       <div class="mb-3">
@@ -190,10 +234,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isBanned) {
             <i class="fas fa-eye text-secondary small" id="eye-icon"></i>
           </button>
         </div>
-        <div class="blocked-hint" id="hint-password"><i class="fas fa-triangle-exclamation me-1"></i> Special characters are not allowed.</div>
+        <div class="invalid-feedback-custom" id="password-feedback">Only letters and numbers allowed.</div>
       </div>
 
-      <button type="submit" class="btn btn-success w-100 fw-semibold" <?= $isBanned ? 'disabled' : '' ?>>
+      <button type="submit" class="btn btn-success w-100 fw-semibold" id="login-btn" <?= $isBanned ? 'disabled' : '' ?>>
         <i class="fas fa-right-to-bracket me-2"></i><?= $isBanned ? 'Account Locked' : 'Login' ?>
       </button>
     </form>
@@ -228,38 +272,49 @@ function togglePw() {
 })();
 <?php endif; ?>
 
-const blocked = ["'", '"', ';', '--', '<', '>', '\\', '=', '`', '|', '&', '%', '#', '/'];
-function stripBlocked(val) {
-    let out = val;
-    blocked.forEach(c => { out = out.split(c).join(''); });
-    return out;
-}
-function attachGuard(inputId, hintId) {
-    const input = document.getElementById(inputId);
-    const hint  = document.getElementById(hintId);
-    if (!input) return;
-    input.addEventListener('input', function() {
-        const orig    = this.value;
-        const cleaned = stripBlocked(orig);
-        if (cleaned !== orig) {
-            this.value = cleaned;
-            hint.classList.add('show');
-            setTimeout(() => hint.classList.remove('show'), 2000);
+(function() {
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    const usernameFeed  = document.getElementById('username-feedback');
+    const passwordFeed  = document.getElementById('password-feedback');
+    const loginBtn      = document.getElementById('login-btn');
+    const alphaNumRegex = /^[a-zA-Z0-9]*$/;
+
+    function validateField(input, feedback) {
+        if (!input || !feedback) return false;
+        const val = input.value;
+        const valid = val.length === 0 || alphaNumRegex.test(val);
+        if (!valid) {
+            feedback.classList.add('show');
+            input.classList.add('is-invalid-custom');
+        } else {
+            feedback.classList.remove('show');
+            input.classList.remove('is-invalid-custom');
         }
-    });
-    input.addEventListener('paste', function(e) {
-        e.preventDefault();
-        let text    = (e.clipboardData || window.clipboardData).getData('text');
-        const clean = stripBlocked(text);
-        this.value += clean;
-        if (clean !== text) {
-            hint.classList.add('show');
-            setTimeout(() => hint.classList.remove('show'), 2000);
-        }
-    });
-}
-attachGuard('username', 'hint-username');
-attachGuard('password', 'hint-password');
+        return valid;
+    }
+
+    function toggleLoginButton() {
+        if (!loginBtn) return;
+        const userValid = usernameInput ? alphaNumRegex.test(usernameInput.value) : true;
+        const passValid = passwordInput ? alphaNumRegex.test(passwordInput.value) : true;
+        const bothValid = userValid && passValid;
+        loginBtn.disabled = !bothValid;
+    }
+
+    if (usernameInput) {
+        usernameInput.addEventListener('input', function() {
+            validateField(usernameInput, usernameFeed);
+            toggleLoginButton();
+        });
+    }
+    if (passwordInput) {
+        passwordInput.addEventListener('input', function() {
+            validateField(passwordInput, passwordFeed);
+            toggleLoginButton();
+        });
+    }
+})();
 </script>
 </body>
 </html>

@@ -7,19 +7,24 @@ define('STAFF_ENC_KEY',    'xK#9mP$2vL@nQ8zR!dW6sY&4bT*1jF0e');
 define('STAFF_ENC_METHOD', 'AES-256-CBC');
 
 function enc_staff($data) {
-    $iv     = random_bytes(16);
-    $cipher = openssl_encrypt($data, STAFF_ENC_METHOD, STAFF_ENC_KEY, 0, $iv);
-    return base64_encode($iv . base64_decode($cipher));
+  if ($data === null || $data === '') return '';
+  $iv  = random_bytes(16);
+  $enc = openssl_encrypt($data, STAFF_ENC_METHOD, STAFF_ENC_KEY, 0, $iv);
+  return base64_encode($iv . $enc);  // ← TAMA
 }
 
 function dec_staff($data) {
-    if ($data === null || $data === '') return '';
-    $decoded = base64_decode($data);
-    if (strlen($decoded) < 16) return $data;
-    $iv     = substr($decoded, 0, 16);
-    $result = openssl_decrypt(base64_encode(substr($decoded, 16)), STAFF_ENC_METHOD, STAFF_ENC_KEY, 0, $iv);
-    return $result !== false ? $result : $data;
+  if ($data === null || $data === '') return '';
+  $decoded = base64_decode($data);
+  if (strlen($decoded) < 16) return $data;
+  $iv         = substr($decoded, 0, 16);
+  $ciphertext = substr($decoded, 16);
+  $result     = openssl_decrypt($ciphertext, STAFF_ENC_METHOD, STAFF_ENC_KEY, 0, $iv);  // ← TAMA
+  return $result !== false ? $result : $data;
 }
+
+$staff_error = $_SESSION['staff_error'] ?? '';
+unset($_SESSION['staff_error']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
@@ -31,10 +36,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $username  = trim($_POST['username']  ?? '');
         $password  = $_POST['password']       ?? '';
 
-        if ($firstname && $lastname && $address && $contact && $username && $password) {
+        $errors = [];
+        if (!preg_match('/^[a-zA-Z\s]+$/', $firstname)) $errors[] = 'First name: only letters and spaces allowed.';
+        if (!preg_match('/^[a-zA-Z\s]+$/', $lastname)) $errors[] = 'Last name: only letters and spaces allowed.';
+        if (!preg_match('/^[a-zA-Z0-9\s.,()]+$/', $address)) $errors[] = 'Address: only letters, numbers, spaces, . , ( ) allowed.';
+        if (!preg_match('/^09\d{9}$/', $contact)) $errors[] = 'Contact: must be 11 digits starting with 09.';
+        if (!preg_match('/^[a-zA-Z0-9]+$/', $username)) $errors[] = 'Username: only letters and numbers allowed.';
+        if (!preg_match('/^[a-zA-Z0-9]+$/', $password)) $errors[] = 'Password: only letters and numbers, no spaces.';
+
+        if (empty($errors)) {
             $hash = password_hash($password, PASSWORD_BCRYPT);
             $stmt = $pdo->prepare("INSERT INTO staff_info (firstname, lastname, address, contact, username, password) VALUES (?,?,?,?,?,?)");
             $stmt->execute([enc_staff($firstname), enc_staff($lastname), enc_staff($address), enc_staff($contact), $username, $hash]);
+        } else {
+            $_SESSION['staff_error'] = implode('<br>', $errors);
         }
     }
 
@@ -47,7 +62,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $username  = trim($_POST['username']  ?? '');
         $password  = $_POST['password']       ?? '';
 
-        if ($id && $firstname && $lastname && $address && $contact && $username) {
+        $errors = [];
+        if (!preg_match('/^[a-zA-Z\s]+$/', $firstname)) $errors[] = 'First name: only letters and spaces allowed.';
+        if (!preg_match('/^[a-zA-Z\s]+$/', $lastname)) $errors[] = 'Last name: only letters and spaces allowed.';
+        if (!preg_match('/^[a-zA-Z0-9\s.,()]+$/', $address)) $errors[] = 'Address: only letters, numbers, spaces, . , ( ) allowed.';
+        if (!preg_match('/^09\d{9}$/', $contact)) $errors[] = 'Contact: must be 11 digits starting with 09.';
+        if (!preg_match('/^[a-zA-Z0-9]+$/', $username)) $errors[] = 'Username: only letters and numbers allowed.';
+        if ($password !== '' && !preg_match('/^[a-zA-Z0-9]+$/', $password)) $errors[] = 'Password: only letters and numbers, no spaces.';
+
+        if (empty($errors)) {
             if (!empty($password)) {
                 $hash = password_hash($password, PASSWORD_BCRYPT);
                 $pdo->prepare("UPDATE staff_info SET firstname=?,lastname=?,address=?,contact=?,username=?,password=? WHERE staff_id=?")
@@ -56,6 +79,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $pdo->prepare("UPDATE staff_info SET firstname=?,lastname=?,address=?,contact=?,username=? WHERE staff_id=?")
                     ->execute([enc_staff($firstname), enc_staff($lastname), enc_staff($address), enc_staff($contact), $username, $id]);
             }
+        } else {
+            $_SESSION['staff_error'] = implode('<br>', $errors);
         }
     }
 
@@ -86,6 +111,9 @@ foreach ($rows as $s) {
 <title>Staff</title>
 <link rel="stylesheet" href="/plant/assets/vendor/bootstrap-5/css/bootstrap.min.css">
 <link rel="stylesheet" href="/plant/assets/vendor/fontawesome-7/css/all.min.css">
+<style>
+.invalid-feedback { display: block; }
+</style>
 </head>
 <body>
 
@@ -101,6 +129,12 @@ foreach ($rows as $s) {
   </div>
 
   <div class="p-4">
+    <?php if ($staff_error): ?>
+    <div class="alert alert-danger py-2 small border-0 rounded-3 mb-3">
+      <i class="fas fa-circle-exclamation me-1"></i><?= $staff_error ?>
+    </div>
+    <?php endif; ?>
+
     <div class="d-flex justify-content-between align-items-center mb-3">
       <span class="text-muted small"><?= count($staff) ?> staff found</span>
       <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addModal">
@@ -169,29 +203,34 @@ foreach ($rows as $s) {
         <h6 class="modal-title fw-bold">Add Staff</h6>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form method="POST">
+      <form method="POST" id="addForm">
         <input type="hidden" name="action" value="add">
         <div class="modal-body">
           <div class="row g-3">
             <div class="col-6">
               <label class="form-label small fw-semibold text-secondary">First Name</label>
               <input type="text" name="firstname" class="form-control" required maxlength="100">
+              <div class="invalid-feedback"></div>
             </div>
             <div class="col-6">
               <label class="form-label small fw-semibold text-secondary">Last Name</label>
               <input type="text" name="lastname" class="form-control" required maxlength="100">
+              <div class="invalid-feedback"></div>
             </div>
             <div class="col-12">
               <label class="form-label small fw-semibold text-secondary">Address</label>
               <textarea name="address" class="form-control" rows="2" required maxlength="300"></textarea>
+              <div class="invalid-feedback"></div>
             </div>
             <div class="col-6">
               <label class="form-label small fw-semibold text-secondary">Contact</label>
-              <input type="text" name="contact" class="form-control" required maxlength="20">
+              <input type="text" name="contact" class="form-control" required maxlength="11">
+              <div class="invalid-feedback"></div>
             </div>
             <div class="col-6">
               <label class="form-label small fw-semibold text-secondary">Username</label>
               <input type="text" name="username" class="form-control" required maxlength="50">
+              <div class="invalid-feedback"></div>
             </div>
             <div class="col-12">
               <label class="form-label small fw-semibold text-secondary">Password</label>
@@ -199,6 +238,7 @@ foreach ($rows as $s) {
                 <input type="password" name="password" id="addPw" class="form-control border-end-0" required maxlength="128">
                 <button type="button" class="btn btn-outline-secondary border-start-0" onclick="togglePw('addPw',this)"><i class="fas fa-eye fa-sm"></i></button>
               </div>
+              <div class="invalid-feedback"></div>
             </div>
           </div>
         </div>
@@ -219,7 +259,7 @@ foreach ($rows as $s) {
         <h6 class="modal-title fw-bold">Edit Staff</h6>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form method="POST">
+      <form method="POST" id="editForm">
         <input type="hidden" name="action" value="edit">
         <input type="hidden" name="staff_id" id="editId">
         <div class="modal-body">
@@ -227,22 +267,27 @@ foreach ($rows as $s) {
             <div class="col-6">
               <label class="form-label small fw-semibold text-secondary">First Name</label>
               <input type="text" name="firstname" id="editFirstname" class="form-control" required maxlength="100">
+              <div class="invalid-feedback"></div>
             </div>
             <div class="col-6">
               <label class="form-label small fw-semibold text-secondary">Last Name</label>
               <input type="text" name="lastname" id="editLastname" class="form-control" required maxlength="100">
+              <div class="invalid-feedback"></div>
             </div>
             <div class="col-12">
               <label class="form-label small fw-semibold text-secondary">Address</label>
               <textarea name="address" id="editAddress" class="form-control" rows="2" required maxlength="300"></textarea>
+              <div class="invalid-feedback"></div>
             </div>
             <div class="col-6">
               <label class="form-label small fw-semibold text-secondary">Contact</label>
-              <input type="text" name="contact" id="editContact" class="form-control" required maxlength="20">
+              <input type="text" name="contact" id="editContact" class="form-control" required maxlength="11">
+              <div class="invalid-feedback"></div>
             </div>
             <div class="col-6">
               <label class="form-label small fw-semibold text-secondary">Username</label>
               <input type="text" name="username" id="editUsername" class="form-control" required maxlength="50">
+              <div class="invalid-feedback"></div>
             </div>
             <div class="col-12">
               <label class="form-label small fw-semibold text-secondary">New Password <span class="text-muted fw-normal">(leave blank to keep)</span></label>
@@ -250,6 +295,7 @@ foreach ($rows as $s) {
                 <input type="password" name="password" id="editPw" class="form-control border-end-0" maxlength="128">
                 <button type="button" class="btn btn-outline-secondary border-start-0" onclick="togglePw('editPw',this)"><i class="fas fa-eye fa-sm"></i></button>
               </div>
+              <div class="invalid-feedback"></div>
             </div>
           </div>
         </div>
@@ -283,7 +329,6 @@ foreach ($rows as $s) {
 </div>
 
 <script src="/plant/assets/vendor/bootstrap-5/js/bootstrap.bundle.min.js"></script>
-<script src="/plant/assets/vendor/bootstrap-5/js/bootstrap.bundle.min.js"></script>
 <script>
 document.getElementById('editModal').addEventListener('show.bs.modal', function(e) {
     const b = e.relatedTarget;
@@ -294,6 +339,8 @@ document.getElementById('editModal').addEventListener('show.bs.modal', function(
     document.getElementById('editContact').value   = b.dataset.contact;
     document.getElementById('editUsername').value  = b.dataset.username;
     document.getElementById('editPw').value        = '';
+    document.querySelectorAll('#editForm .is-invalid').forEach(el => el.classList.remove('is-invalid'));
+    document.querySelectorAll('#editForm .invalid-feedback').forEach(el => el.textContent = '');
 });
 document.getElementById('deleteModal').addEventListener('show.bs.modal', function(e) {
     document.getElementById('deleteId').value         = e.relatedTarget.dataset.id;
@@ -316,18 +363,20 @@ function togglePw(id, btn) {
 
 (function () {
     const RULES = {
-        name:     { re: /^[a-zA-Z\s]*$/,             msg: 'Letters and spaces only.' },
-        contact:  { re: /^\d*$/,                      msg: 'Numbers only.' },
-        address:  { re: /^[a-zA-Z0-9\s.,#\-\/()]*$/, msg: 'No special/script characters allowed.' },
-        username: { re: /^[a-zA-Z0-9_\-]*$/,          msg: 'Letters, numbers, _ and - only.' },
+        name:     { re: /^[a-zA-Z\s]*$/,    msg: '' },
+        address:  { re: /^[a-zA-Z0-9\s.,()]*$/, msg: '' },
+        contact:  { re: /^09\d{0,9}$/,       msg: 'Must be 11 digits starting with 09.' },
+        username: { re: /^[a-zA-Z0-9]*$/,    msg: 'Only letters and numbers allowed.' },
+        password: { re: /^[a-zA-Z0-9]*$/,    msg: 'Only letters and numbers, no spaces.' }
     };
 
     function getRule(input) {
         const n = input.name;
         if (n === 'firstname' || n === 'lastname') return RULES.name;
-        if (n === 'contact')  return RULES.contact;
         if (n === 'address')  return RULES.address;
+        if (n === 'contact')  return RULES.contact;
         if (n === 'username') return RULES.username;
+        if (n === 'password') return RULES.password;
         return null;
     }
 
@@ -336,7 +385,6 @@ function togglePw(id, btn) {
         if (!fb) {
             fb = document.createElement('div');
             fb.className = 'invalid-feedback';
-            fb.style.display = 'block';
             input.parentElement.appendChild(fb);
         }
         return fb;
@@ -366,7 +414,7 @@ function togglePw(id, btn) {
     }
 
     function attachLive(form) {
-        ['firstname','lastname','contact','address','username'].forEach(name => {
+        ['firstname','lastname','contact','address','username','password'].forEach(name => {
             const el = form.querySelector(`[name="${name}"]`);
             if (!el) return;
             el.addEventListener('input', () => validate(el));
@@ -374,16 +422,20 @@ function togglePw(id, btn) {
         });
         form.addEventListener('submit', function(e) {
             let ok = true;
-            ['firstname','lastname','contact','address','username'].forEach(name => {
+            const action = form.querySelector('[name="action"]').value;
+            ['firstname','lastname','contact','address','username','password'].forEach(name => {
                 const el = form.querySelector(`[name="${name}"]`);
                 if (!el) return;
+                if (name === 'password' && action === 'edit' && el.value === '') {
+                    return; // password optional in edit
+                }
                 if (!validate(el)) ok = false;
             });
             if (!ok) e.preventDefault();
         });
     }
 
-    document.querySelectorAll('#addModal form, #editModal form').forEach(attachLive);
+    document.querySelectorAll('#addForm, #editForm').forEach(attachLive);
 })();
 </script>
 </body>

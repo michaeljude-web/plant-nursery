@@ -3,6 +3,23 @@ require_once __DIR__ . '/../includes/admin/auth.php';
 require_once __DIR__ . '/../config/config.php';
 require_admin_auth();
 
+if (!defined('STAFF_ENC_KEY')) {
+    define('STAFF_ENC_KEY',    'xK#9mP$2vL@nQ8zR!dW6sY&4bT*1jF0e');
+    define('STAFF_ENC_METHOD', 'AES-256-CBC');
+}
+
+if (!function_exists('dec_staff')) {
+    function dec_staff($data) {
+        if ($data === null || $data === '') return '';
+        $decoded = base64_decode($data);
+        if (strlen($decoded) < 16) return $data;
+        $iv         = substr($decoded, 0, 16);
+        $ciphertext = substr($decoded, 16);
+        $result     = openssl_decrypt($ciphertext, STAFF_ENC_METHOD, STAFF_ENC_KEY, 0, $iv);
+        return $result !== false ? $result : $data;
+    }
+}
+
 $date_from = $_GET['date_from'] ?? '';
 $date_to   = $_GET['date_to'] ?? '';
 
@@ -57,15 +74,17 @@ $top_varieties = $top_stmt->fetchAll();
 
 $recent_stmt = $pdo->prepare("
     SELECT o.order_id, o.ordered_at,
-           CONCAT(c.firstname,' ',c.lastname) as customer,
-           CONCAT(si.firstname,' ',si.lastname) as staff_name,
+           c.firstname  as cust_firstname,
+           c.lastname   as cust_lastname,
+           si.firstname as staff_firstname,
+           si.lastname  as staff_lastname,
            COUNT(oi.item_id) as item_count
     FROM orders o
     JOIN customer_info c ON o.customer_id = c.customer_id
     JOIN staff_info si ON o.staff_id = si.staff_id
     LEFT JOIN order_items oi ON o.order_id = oi.order_id
     WHERE 1=1 $order_where
-    GROUP BY o.order_id
+    GROUP BY o.order_id, c.firstname, c.lastname, si.firstname, si.lastname
     ORDER BY o.ordered_at DESC
     LIMIT 5
 ");
@@ -268,9 +287,13 @@ $recent_orders = $recent_stmt->fetchAll();
             <?php else: ?>
             <?php foreach ($recent_orders as $o): ?>
             <tr>
-              <td class="ps-4 fw-semibold small"><?= htmlspecialchars($o['customer']) ?></td>
+              <td class="ps-4 fw-semibold small">
+                <?= htmlspecialchars(dec_staff($o['cust_firstname']) . ' ' . dec_staff($o['cust_lastname'])) ?>
+              </td>
               <td class="small text-muted"><?= $o['item_count'] ?> item<?= $o['item_count'] != 1 ? 's' : '' ?></td>
-              <td class="small"><?= htmlspecialchars($o['staff_name']) ?></td>
+              <td class="small">
+                <?= htmlspecialchars(dec_staff($o['staff_firstname']) . ' ' . dec_staff($o['staff_lastname'])) ?>
+              </td>
               <td class="small text-muted text-nowrap"><?= date('M d, Y h:i A', strtotime($o['ordered_at'])) ?></td>
             </tr>
             <?php endforeach; ?>

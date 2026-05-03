@@ -3,37 +3,52 @@ require_once __DIR__ . '/../includes/admin/auth.php';
 require_once __DIR__ . '/../config/config.php';
 require_admin_auth();
 
+$plant_error = $_SESSION['plant_error'] ?? '';
+unset($_SESSION['plant_error']);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     if ($_POST['action'] === 'add_seedling') {
         $name = trim($_POST['seedling_name'] ?? '');
-        if ($name) {
+        if ($name && preg_match('/^[a-zA-Z\s]+$/', $name)) {
             $pdo->prepare("INSERT INTO seedlings (seedling_name) VALUES (?)")->execute([$name]);
+        } else {
+            $_SESSION['plant_error'] = 'Seedling name: only letters.';
         }
     }
 
     if ($_POST['action'] === 'edit_seedling') {
         $id   = (int)$_POST['seedling_id'];
         $name = trim($_POST['seedling_name'] ?? '');
-        if ($id && $name) {
+        if ($id && $name && preg_match('/^[a-zA-Z\s]+$/', $name)) {
             $pdo->prepare("UPDATE seedlings SET seedling_name = ? WHERE seedling_id = ?")->execute([$name, $id]);
+        } else {
+            $_SESSION['plant_error'] = 'Seedling name: only letters.';
         }
     }
 
     if ($_POST['action'] === 'add_variety') {
-        $sid  = (int)$_POST['seedling_id'];
-        $name = trim($_POST['variety_name'] ?? '');
-        if ($sid && $name) {
-            $pdo->prepare("INSERT INTO varieties (seedling_id, variety_name) VALUES (?,?)")->execute([$sid, $name]);
+        $sid   = (int)$_POST['seedling_id'];
+        $name  = trim($_POST['variety_name'] ?? '');
+        $price = $_POST['price'] ?? '';
+        $price = is_numeric($price) && $price >= 0 ? $price : 0;
+        if ($sid && $name && preg_match('/^[a-zA-Z\s]+$/', $name)) {
+            $pdo->prepare("INSERT INTO varieties (seedling_id, variety_name, price) VALUES (?,?,?)")->execute([$sid, $name, $price]);
+        } else {
+            $_SESSION['plant_error'] = 'Variety name: only letters.';
         }
     }
 
     if ($_POST['action'] === 'edit_variety') {
-        $id   = (int)$_POST['variety_id'];
-        $sid  = (int)$_POST['seedling_id'];
-        $name = trim($_POST['variety_name'] ?? '');
-        if ($id && $sid && $name) {
-            $pdo->prepare("UPDATE varieties SET seedling_id = ?, variety_name = ? WHERE variety_id = ?")->execute([$sid, $name, $id]);
+        $id    = (int)$_POST['variety_id'];
+        $sid   = (int)$_POST['seedling_id'];
+        $name  = trim($_POST['variety_name'] ?? '');
+        $price = $_POST['price'] ?? '';
+        $price = is_numeric($price) && $price >= 0 ? $price : 0;
+        if ($id && $sid && $name && preg_match('/^[a-zA-Z\s]+$/', $name)) {
+            $pdo->prepare("UPDATE varieties SET seedling_id = ?, variety_name = ?, price = ? WHERE variety_id = ?")->execute([$sid, $name, $price, $id]);
+        } else {
+            $_SESSION['plant_error'] = 'Variety name: only letters.';
         }
     }
 
@@ -63,6 +78,9 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
 <title>Plants</title>
 <link rel="stylesheet" href="/plant/assets/vendor/bootstrap-5/css/bootstrap.min.css">
 <link rel="stylesheet" href="/plant/assets/vendor/fontawesome-7/css/all.min.css">
+<style>
+.invalid-feedback { display: block; }
+</style>
 </head>
 <body>
 
@@ -78,6 +96,12 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
   </div>
 
   <div class="p-4">
+
+    <?php if ($plant_error): ?>
+    <div class="alert alert-danger py-2 small border-0 rounded-3 mb-3">
+      <i class="fas fa-circle-exclamation me-1"></i><?= htmlspecialchars($plant_error) ?>
+    </div>
+    <?php endif; ?>
 
     <div class="d-flex justify-content-end gap-2 mb-3">
       <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addSeedlingModal">
@@ -147,24 +171,27 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
                 <tr>
                   <th>Seedling</th>
                   <th>Variety</th>
+                  <th>Price</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 <?php if (empty($varieties)): ?>
-                <tr><td colspan="3" class="text-center text-muted py-4">No varieties found.</td></tr>
+                <tr><td colspan="4" class="text-center text-muted py-4">No varieties found.</td></tr>
                 <?php else: ?>
                 <?php foreach ($varieties as $v): ?>
                 <tr>
                   <td class="text-muted small"><?= htmlspecialchars($v['seedling_name']) ?></td>
                   <td class="fw-semibold"><?= htmlspecialchars($v['variety_name']) ?></td>
+                  <td class="text-muted">&#8369; <?= number_format($v['price'], 2) ?></td>
                   <td class="text-end pe-3">
                     <div class="d-flex gap-1 justify-content-end">
                       <button class="btn btn-sm btn-primary"
                         data-bs-toggle="modal" data-bs-target="#editVarietyModal"
                         data-id="<?= $v['variety_id'] ?>"
                         data-name="<?= htmlspecialchars($v['variety_name']) ?>"
-                        data-seedling-id="<?= $v['seedling_id'] ?>">
+                        data-seedling-id="<?= $v['seedling_id'] ?>"
+                        data-price="<?= $v['price'] ?>">
                         <i class="fas fa-pen"></i>
                       </button>
                       <button class="btn btn-sm btn-danger"
@@ -194,11 +221,12 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
         <h6 class="modal-title fw-bold">Add Seedling</h6>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form method="POST">
+      <form method="POST" id="addSeedlingForm">
         <input type="hidden" name="action" value="add_seedling">
         <div class="modal-body">
           <label class="form-label small fw-semibold text-secondary">Seedling Name</label>
           <input type="text" name="seedling_name" class="form-control" required maxlength="100">
+          <div class="invalid-feedback"></div>
         </div>
         <div class="modal-footer border-0 pt-0">
           <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
@@ -216,12 +244,13 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
         <h6 class="modal-title fw-bold">Edit Seedling</h6>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form method="POST">
+      <form method="POST" id="editSeedlingForm">
         <input type="hidden" name="action" value="edit_seedling">
         <input type="hidden" name="seedling_id" id="editSeedlingId">
         <div class="modal-body">
           <label class="form-label small fw-semibold text-secondary">Seedling Name</label>
           <input type="text" name="seedling_name" id="editSeedlingName" class="form-control" required maxlength="100">
+          <div class="invalid-feedback"></div>
         </div>
         <div class="modal-footer border-0 pt-0">
           <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
@@ -239,7 +268,7 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
         <h6 class="modal-title fw-bold">Add Variety</h6>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form method="POST">
+      <form method="POST" id="addVarietyForm">
         <input type="hidden" name="action" value="add_variety">
         <div class="modal-body">
           <div class="mb-3">
@@ -251,9 +280,14 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
               <?php endforeach; ?>
             </select>
           </div>
-          <div>
+          <div class="mb-3">
             <label class="form-label small fw-semibold text-secondary">Variety Name</label>
             <input type="text" name="variety_name" class="form-control" required maxlength="100">
+            <div class="invalid-feedback"></div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold text-secondary">Price (&#8369;)</label>
+            <input type="number" name="price" class="form-control" step="0.01" min="0" value="0" required>
           </div>
         </div>
         <div class="modal-footer border-0 pt-0">
@@ -272,7 +306,7 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
         <h6 class="modal-title fw-bold">Edit Variety</h6>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form method="POST">
+      <form method="POST" id="editVarietyForm">
         <input type="hidden" name="action" value="edit_variety">
         <input type="hidden" name="variety_id" id="editVarietyId">
         <div class="modal-body">
@@ -285,9 +319,14 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
               <?php endforeach; ?>
             </select>
           </div>
-          <div>
+          <div class="mb-3">
             <label class="form-label small fw-semibold text-secondary">Variety Name</label>
             <input type="text" name="variety_name" id="editVarietyName" class="form-control" required maxlength="100">
+            <div class="invalid-feedback"></div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold text-secondary">Price (&#8369;)</label>
+            <input type="number" name="price" id="editVarietyPrice" class="form-control" step="0.01" min="0" required>
           </div>
         </div>
         <div class="modal-footer border-0 pt-0">
@@ -339,16 +378,58 @@ $varieties = $pdo->query("SELECT v.*, s.seedling_name FROM varieties v JOIN seed
 
 <script src="/plant/assets/vendor/bootstrap-5/js/bootstrap.bundle.min.js"></script>
 <script>
+(function() {
+    const re = /^[a-zA-Z\s]*$/;
+
+    function validatePlantName(input) {
+        const fb = input.parentElement.querySelector('.invalid-feedback');
+        const val = input.value;
+        if (!re.test(val)) {
+            input.classList.add('is-invalid');
+            if (fb) fb.textContent = 'Only letters.';
+        } else {
+            input.classList.remove('is-invalid');
+            if (fb) fb.textContent = '';
+        }
+    }
+
+    function attachValidation(form) {
+        const nameInput = form.querySelector('input[name="seedling_name"]') || form.querySelector('input[name="variety_name"]');
+        if (!nameInput) return;
+        nameInput.addEventListener('input', function() {
+            validatePlantName(nameInput);
+        });
+        form.addEventListener('submit', function(e) {
+            validatePlantName(nameInput);
+            if (!re.test(nameInput.value)) {
+                e.preventDefault();
+            }
+        });
+    }
+
+    document.querySelectorAll('#addSeedlingForm, #editSeedlingForm, #addVarietyForm, #editVarietyForm').forEach(attachValidation);
+})();
+</script>
+<script>
 document.getElementById('editSeedlingModal').addEventListener('show.bs.modal', function(e) {
     const b = e.relatedTarget;
     document.getElementById('editSeedlingId').value       = b.dataset.id;
     document.getElementById('editSeedlingName').value     = b.dataset.name;
+    const input = document.getElementById('editSeedlingName');
+    input.classList.remove('is-invalid');
+    const fb = input.parentElement.querySelector('.invalid-feedback');
+    if (fb) fb.textContent = '';
 });
 document.getElementById('editVarietyModal').addEventListener('show.bs.modal', function(e) {
     const b = e.relatedTarget;
     document.getElementById('editVarietyId').value        = b.dataset.id;
     document.getElementById('editVarietyName').value      = b.dataset.name;
     document.getElementById('editVarietySeedlingId').value = b.dataset.seedlingId;
+    document.getElementById('editVarietyPrice').value     = b.dataset.price;
+    const input = document.getElementById('editVarietyName');
+    input.classList.remove('is-invalid');
+    const fb = input.parentElement.querySelector('.invalid-feedback');
+    if (fb) fb.textContent = '';
 });
 document.getElementById('deleteSeedlingModal').addEventListener('show.bs.modal', function(e) {
     document.getElementById('deleteSeedlingId').value             = e.relatedTarget.dataset.id;

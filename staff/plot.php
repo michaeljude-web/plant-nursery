@@ -60,7 +60,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $quantity_damaged = (int)$_POST['quantity_damaged'];
         $description      = trim($_POST['description'] ?? '');
         $staff_id         = $_SESSION['staff_id'];
-        if ($plot_id && $plot_seedling_id && $quantity_damaged > 0) {
+
+        if ($description !== '' && !preg_match('/^[a-zA-Z0-9 ]+$/', $description)) {
+            $_SESSION['plot_error'] = 'Invalid description. Only letters, numbers and spaces allowed.';
+        } elseif ($plot_id && $plot_seedling_id && $quantity_damaged > 0) {
             $rpt = $pdo->prepare("INSERT INTO damage_reports (plot_id, plot_seedling_id, staff_id, quantity_damaged, description) VALUES (?,?,?,?,?)");
             $rpt->execute([$plot_id, $plot_seedling_id, $staff_id, $quantity_damaged, $description]);
             $report_id = $pdo->lastInsertId();
@@ -108,6 +111,25 @@ $varieties = $pdo->query("SELECT v.variety_id, v.variety_name, s.seedling_name F
 <link rel="stylesheet" href="/plant/assets/vendor/fontawesome-7/css/all.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/staff/plot.css">
+<style>
+.invalid-feedback-custom {
+    font-size: 11px;
+    color: #dc3545;
+    margin-top: 4px;
+    display: none;
+}
+.invalid-feedback-custom.show {
+    display: block;
+}
+textarea.is-invalid-custom {
+    border-color: #dc3545 !important;
+    box-shadow: 0 0 0 0.2rem rgba(220,53,69,.15) !important;
+}
+button:disabled {
+    cursor: not-allowed !important;
+    opacity: 0.65;
+}
+</style>
 </head>
 <body>
 
@@ -272,7 +294,7 @@ $varieties = $pdo->query("SELECT v.variety_id, v.variety_name, s.seedling_name F
                 <span class="modal-title"><i class="fas fa-triangle-exclamation" style="color:var(--red);margin-right:8px"></i>Report Damage</span>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form method="POST" enctype="multipart/form-data">
+            <form method="POST" enctype="multipart/form-data" id="damageForm">
                 <input type="hidden" name="action" value="report_damage">
                 <input type="hidden" name="plot_seedling_id" id="damageId">
                 <input type="hidden" name="plot_id" id="damagePlotId">
@@ -284,7 +306,8 @@ $varieties = $pdo->query("SELECT v.variety_id, v.variety_name, s.seedling_name F
                     </div>
                     <div class="mb-f">
                         <label class="field-label">Description</label>
-                        <textarea name="description" class="field-textarea" rows="3" placeholder="Describe the damage..."></textarea>
+                        <textarea name="description" id="damageDescription" class="field-textarea" rows="3" placeholder="Describe the damage..."></textarea>
+                        <div class="invalid-feedback-custom" id="hint-damage-desc"></div>
                     </div>
                     <div>
                         <label class="field-label">Photos</label>
@@ -294,7 +317,7 @@ $varieties = $pdo->query("SELECT v.variety_id, v.variety_name, s.seedling_name F
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn-cx" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn-del"><i class="fas fa-triangle-exclamation" style="margin-right:5px"></i>Submit Report</button>
+                    <button type="submit" class="btn-del" id="damageSubmitBtn"><i class="fas fa-triangle-exclamation" style="margin-right:5px"></i>Submit Report</button>
                 </div>
             </form>
         </div>
@@ -322,7 +345,43 @@ document.getElementById('damageModal').addEventListener('show.bs.modal', functio
     document.getElementById('damagePlotId').value     = b.dataset.plot;
     document.getElementById('damageName').textContent = b.dataset.name;
     document.getElementById('damageQty').max          = b.dataset.max;
+    document.getElementById('damageDescription').value = '';
+    document.getElementById('hint-damage-desc').classList.remove('show');
+    document.getElementById('damageDescription').classList.remove('is-invalid-custom');
+    document.getElementById('damageSubmitBtn').disabled = false;
 });
+
+(function() {
+    const descTextarea = document.getElementById('damageDescription');
+    const descHint     = document.getElementById('hint-damage-desc');
+    const submitBtn    = document.getElementById('damageSubmitBtn');
+    const regex        = /^[a-zA-Z0-9 ]*$/;
+
+    if (!descTextarea || !descHint) return;
+
+    function validateDescription() {
+        const val = descTextarea.value;
+        if (val.length > 0 && !regex.test(val)) {
+            descHint.textContent = 'Only letters, numbers and spaces allowed.';
+            descHint.classList.add('show');
+            descTextarea.classList.add('is-invalid-custom');
+            if (submitBtn) submitBtn.disabled = true;
+        } else {
+            descHint.classList.remove('show');
+            descTextarea.classList.remove('is-invalid-custom');
+            if (submitBtn) submitBtn.disabled = false;
+        }
+    }
+
+    descTextarea.addEventListener('input', validateDescription);
+    descTextarea.addEventListener('paste', function(e) {
+        e.preventDefault();
+        let text = (e.clipboardData || window.clipboardData).getData('text');
+        text = text.split('').filter(ch => regex.test(ch)).join('');
+        descTextarea.value += text;
+        validateDescription();
+    });
+})();
 </script>
 </body>
 </html>
