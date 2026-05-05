@@ -93,6 +93,7 @@
     <li><a href="/plant/admin/logs.php" class="nav-link <?= basename($_SERVER['PHP_SELF'])=='logs.php'?'active':'' ?>"><i class="fas fa-clock-rotate-left"></i> Logs</a></li>
     <li><a href="/plant/admin/reports.php" class="nav-link <?= basename($_SERVER['PHP_SELF'])=='reports.php'?'active':'' ?>"><i class="fas fa-chart-bar"></i> Reports</a></li>
     <li><a href="/plant/admin/settings.php" class="nav-link <?= basename($_SERVER['PHP_SELF'])=='settings.php'?'active':'' ?>"><i class="fa-solid fa-gear me-1"></i> Settings</a></li>
+    <li><a href="/plant/admin/backup.php" class="nav-link <?= basename($_SERVER['PHP_SELF'])=='backup.php'?'active':'' ?>"><i class="fas fa-database"></i> Database Backup</a></li>
   </ul>
   <div class="sidebar-footer">
     <div class="user-wrap">
