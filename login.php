@@ -15,7 +15,7 @@ if (!empty($_SESSION['staff_logged_in'])) {
 }
 
 $MAX_ATTEMPTS = 5;
-$BAN_SECONDS  = 20;
+$BAN_SECONDS  = 300;
 $type         = 'plant';
 
 $ip          = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
@@ -38,10 +38,6 @@ if ($row && !$isBanned && $ban_until > 0) {
     $pdo->prepare("DELETE FROM login_attempts WHERE ip_address = ? AND device_hash = ? AND type = ?")
         ->execute([$ip, $device_hash, $type]);
     $attempts = 0;
-}
-
-function is_safe_input($val) {
-    return preg_match('/^[a-zA-Z0-9]+$/', $val) === 1;
 }
 
 if (!defined('STAFF_ENC_KEY')) {
@@ -68,29 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isBanned) {
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password']     ?? '';
 
-    if (!is_safe_input($username) || !is_safe_input($password)) {
-        $error = 'Invalid characters detected. Only letters and numbers allowed.';
-
-        $attempts++;
-        if ($attempts >= $MAX_ATTEMPTS) {
-            $ban_until = time() + $BAN_SECONDS;
-
-            $pdo->prepare("
-                INSERT INTO login_attempts (ip_address, device_hash, type, attempts, ban_until)
-                VALUES (?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE attempts = ?, ban_until = ?
-            ")->execute([$ip, $device_hash, $type, $attempts, $ban_until, $attempts, $ban_until]);
-
-            header('Location: /plant/login.php');
-            exit();
-        } else {
-            $pdo->prepare("
-                INSERT INTO login_attempts (ip_address, device_hash, type, attempts, ban_until)
-                VALUES (?, ?, ?, ?, 0)
-                ON DUPLICATE KEY UPDATE attempts = ?
-            ")->execute([$ip, $device_hash, $type, $attempts, $attempts]);
-        }
-    } elseif (empty($username) || empty($password)) {
+    if (empty($username) || empty($password)) {
         $error = 'Please fill in all fields.';
     } else {
         $stmt = $pdo->prepare("SELECT admin_id, username, password FROM admin WHERE username = ? LIMIT 1");
@@ -198,7 +172,7 @@ button:disabled {
     <?php if ($isBanned): ?>
     <div class="alert alert-danger py-2 small text-center">
         <i class="fas fa-ban me-1"></i>
-        <strong>Try again in <span id="countdown"><?= $banSecondsLeft ?></span> second<?= $banSecondsLeft !== 1 ? 's' : '' ?>.</strong>
+        <strong>Try again in <span id="countdown"><?= $banSecondsLeft >= 60 ? floor($banSecondsLeft / 60) . 'm ' . ($banSecondsLeft % 60) . 's' : $banSecondsLeft . 's' ?></span>.</strong>
     </div>
     <?php elseif ($timeout): ?>
     <div class="alert alert-warning py-2 small"><i class="fas fa-clock me-1"></i> Session expired.</div>
@@ -219,7 +193,6 @@ button:disabled {
             <?= $isBanned ? 'disabled' : '' ?>
             value="<?= htmlspecialchars($_POST['username'] ?? '') ?>">
         </div>
-        <div class="invalid-feedback-custom" id="username-feedback">Only letters and numbers allowed.</div>
       </div>
 
       <div class="mb-3">
@@ -234,7 +207,6 @@ button:disabled {
             <i class="fas fa-eye text-secondary small" id="eye-icon"></i>
           </button>
         </div>
-        <div class="invalid-feedback-custom" id="password-feedback">Only letters and numbers allowed.</div>
       </div>
 
       <button type="submit" class="btn btn-success w-100 fw-semibold" id="login-btn" <?= $isBanned ? 'disabled' : '' ?>>
@@ -266,7 +238,11 @@ function togglePw() {
     const c1 = document.getElementById('countdown');
     const timer = setInterval(function() {
         secs--;
-        if (c1) c1.textContent = secs;
+        if (c1) {
+            const mins = Math.floor(secs / 60);
+            const seconds = secs % 60;
+            c1.textContent = mins > 0 ? mins + 'm ' + seconds + 's' : seconds + 's';
+        }
         if (secs <= 0) { clearInterval(timer); location.href = '/plant/login.php'; }
     }, 1000);
 })();
@@ -275,45 +251,22 @@ function togglePw() {
 (function() {
     const usernameInput = document.getElementById('username');
     const passwordInput = document.getElementById('password');
-    const usernameFeed  = document.getElementById('username-feedback');
-    const passwordFeed  = document.getElementById('password-feedback');
     const loginBtn      = document.getElementById('login-btn');
-    const alphaNumRegex = /^[a-zA-Z0-9]*$/;
-
-    function validateField(input, feedback) {
-        if (!input || !feedback) return false;
-        const val = input.value;
-        const valid = val.length === 0 || alphaNumRegex.test(val);
-        if (!valid) {
-            feedback.classList.add('show');
-            input.classList.add('is-invalid-custom');
-        } else {
-            feedback.classList.remove('show');
-            input.classList.remove('is-invalid-custom');
-        }
-        return valid;
-    }
 
     function toggleLoginButton() {
         if (!loginBtn) return;
-        const userValid = usernameInput ? alphaNumRegex.test(usernameInput.value) : true;
-        const passValid = passwordInput ? alphaNumRegex.test(passwordInput.value) : true;
-        const bothValid = userValid && passValid;
-        loginBtn.disabled = !bothValid;
+        const userFilled = usernameInput && usernameInput.value.trim().length > 0;
+        const passFilled = passwordInput && passwordInput.value.length > 0;
+        loginBtn.disabled = !(userFilled && passFilled);
     }
 
     if (usernameInput) {
-        usernameInput.addEventListener('input', function() {
-            validateField(usernameInput, usernameFeed);
-            toggleLoginButton();
-        });
+        usernameInput.addEventListener('input', toggleLoginButton);
     }
     if (passwordInput) {
-        passwordInput.addEventListener('input', function() {
-            validateField(passwordInput, passwordFeed);
-            toggleLoginButton();
-        });
+        passwordInput.addEventListener('input', toggleLoginButton);
     }
+    toggleLoginButton();
 })();
 </script>
 </body>

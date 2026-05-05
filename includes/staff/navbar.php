@@ -1,6 +1,32 @@
 <?php
 require_once __DIR__ . '/../../config/config.php';
 
+if (!defined('STAFF_ENC_KEY')) {
+    define('STAFF_ENC_KEY',    'xK#9mP$2vL@nQ8zR!dW6sY&4bT*1jF0e');
+    define('STAFF_ENC_METHOD', 'AES-256-CBC');
+}
+
+if (!function_exists('dec_staff')) {
+    function dec_staff($data) {
+        if ($data === null || $data === '') return '';
+        $decoded = base64_decode($data);
+        if (strlen($decoded) < 16) return $data;
+        $iv         = substr($decoded, 0, 16);
+        $ciphertext = substr($decoded, 16);
+        $result     = openssl_decrypt($ciphertext, STAFF_ENC_METHOD, STAFF_ENC_KEY, 0, $iv);
+        return $result !== false ? $result : $data;
+    }
+}
+
+function get_staff_display_name() {
+    $first = $_SESSION['staff_firstname'] ?? '';
+    $last  = $_SESSION['staff_lastname']  ?? '';
+    if ($first && preg_match('/^[a-zA-Z0-9\/+=]{20,}$/', $first)) $first = dec_staff($first);
+    if ($last  && preg_match('/^[a-zA-Z0-9\/+=]{20,}$/', $last))  $last  = dec_staff($last);
+    return trim($first . ' ' . $last);
+}
+
+$staff_display_name = get_staff_display_name();
 $staff_id = $_SESSION['staff_id'];
 
 function is_safe_password($val) {
@@ -142,7 +168,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['settings_action'])) {
       </ul>
       <div class="dropdown">
         <button class="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown" title="Account">
-          <i class="fas fa-user"></i>
+          <i class="fas fa-user me-1"></i><?= htmlspecialchars($staff_display_name) ?>
         </button>
         <ul class="dropdown-menu dropdown-menu-end">
           <li>

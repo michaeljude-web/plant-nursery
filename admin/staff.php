@@ -10,7 +10,7 @@ function enc_staff($data) {
   if ($data === null || $data === '') return '';
   $iv  = random_bytes(16);
   $enc = openssl_encrypt($data, STAFF_ENC_METHOD, STAFF_ENC_KEY, 0, $iv);
-  return base64_encode($iv . $enc);  // ← TAMA
+  return base64_encode($iv . $enc); 
 }
 
 function dec_staff($data) {
@@ -19,7 +19,7 @@ function dec_staff($data) {
   if (strlen($decoded) < 16) return $data;
   $iv         = substr($decoded, 0, 16);
   $ciphertext = substr($decoded, 16);
-  $result     = openssl_decrypt($ciphertext, STAFF_ENC_METHOD, STAFF_ENC_KEY, 0, $iv);  // ← TAMA
+  $result     = openssl_decrypt($ciphertext, STAFF_ENC_METHOD, STAFF_ENC_KEY, 0, $iv); 
   return $result !== false ? $result : $data;
 }
 
@@ -243,7 +243,6 @@ foreach ($rows as $s) {
           </div>
         </div>
         <div class="modal-footer border-0 pt-0">
-          <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
           <button type="submit" class="btn btn-success btn-sm">Add Staff</button>
         </div>
       </form>
@@ -251,7 +250,6 @@ foreach ($rows as $s) {
   </div>
 </div>
 
-<!-- EDIT STAFF -->
 <div class="modal fade" id="editModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0 shadow">
@@ -308,7 +306,6 @@ foreach ($rows as $s) {
   </div>
 </div>
 
-<!-- DELETE STAFF -->
 <div class="modal fade" id="deleteModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content border-0 shadow">
@@ -427,7 +424,7 @@ function togglePw(id, btn) {
                 const el = form.querySelector(`[name="${name}"]`);
                 if (!el) return;
                 if (name === 'password' && action === 'edit' && el.value === '') {
-                    return; // password optional in edit
+                    return; 
                 }
                 if (!validate(el)) ok = false;
             });

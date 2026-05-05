@@ -10,7 +10,7 @@ if (session_status() === PHP_SESSION_NONE) {
     ]);
     session_start();
 }
-define('SESSION_TIMEOUT', 120);
+define('SESSION_TIMEOUT', 30 * 60);
 
 function regenerate_session(): void {
     session_regenerate_id(true);
