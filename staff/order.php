@@ -44,12 +44,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $errors = [];
         if ($firstname === '' || !preg_match('/^[a-zA-Z ]+$/', $firstname)) {
             $errors[] = 'First name must contain only letters and spaces.';
+        } elseif (preg_match('/\s{2,}/', $firstname)) {
+            $errors[] = 'First name cannot have consecutive spaces.';
         }
         if ($lastname === '' || !preg_match('/^[a-zA-Z ]+$/', $lastname)) {
             $errors[] = 'Last name must contain only letters and spaces.';
+        } elseif (preg_match('/\s{2,}/', $lastname)) {
+            $errors[] = 'Last name cannot have consecutive spaces.';
         }
         if ($address !== '' && !preg_match('/^[a-zA-Z0-9 ,\.\(\)]+$/', $address)) {
             $errors[] = 'Address contains invalid characters. Allowed: letters, numbers, space, comma, period, parentheses.';
+        } elseif ($address !== '' && preg_match('/\s{2,}/', $address)) {
+            $errors[] = 'Address cannot have consecutive spaces.';
         }
         if ($contact_number !== '' && !preg_match('/^09[0-9]{9}$/', $contact_number)) {
             $errors[] = 'Contact number must be 11 digits starting with 09.';
@@ -345,11 +351,23 @@ button:disabled {
         } else {
             isValid = required ? (val !== '' && nameRegex.test(val)) : (val === '' || addrRegex.test(val));
         }
+        if (isValid && (input === firstnameInput || input === lastnameInput || input === addressInput)) {
+            if (val.includes('  ')) {
+                isValid = false;
+                if (input === firstnameInput || input === lastnameInput) {
+                    hint.textContent = 'Only single spaces between words allowed.';
+                } else if (input === addressInput) {
+                    hint.textContent = 'No consecutive spaces allowed.';
+                }
+            }
+        }
         if (touched[input.id]) {
             if (!isValid) {
-                if (input === firstnameInput || input === lastnameInput) hint.textContent = 'Only letters and spaces allowed.';
-                else if (input === addressInput) hint.textContent = 'Allowed: letters, numbers, space, comma, period, parentheses.';
-                else if (input === contactInput) hint.textContent = 'Must be 11 digits starting with 09.';
+                if (!hint.classList.contains('show') || hint.textContent === '') {
+                    if (input === firstnameInput || input === lastnameInput) hint.textContent = 'Only letters and spaces allowed.';
+                    else if (input === addressInput) hint.textContent = 'Allowed: letters, numbers, space, comma, period, parentheses.';
+                    else if (input === contactInput) hint.textContent = 'Must be 11 digits starting with 09.';
+                }
                 hint.classList.add('show');
                 input.classList.add('is-invalid-custom');
             } else {
@@ -361,9 +379,9 @@ button:disabled {
     }
 
     function checkValid() {
-        const firstOk = validateField(firstnameInput, hintFirst, true, v => nameRegex.test(v) && v.length > 0);
-        const lastOk  = validateField(lastnameInput,  hintLast,  true, v => nameRegex.test(v) && v.length > 0);
-        const addrOk  = validateField(addressInput,   hintAddr,  false, v => v === '' || addrRegex.test(v));
+        const firstOk = validateField(firstnameInput, hintFirst, true, v => nameRegex.test(v) && v.length > 0 && !v.includes('  '));
+        const lastOk  = validateField(lastnameInput,  hintLast,  true, v => nameRegex.test(v) && v.length > 0 && !v.includes('  '));
+        const addrOk  = validateField(addressInput,   hintAddr,  false, v => v === '' || (addrRegex.test(v) && !v.includes('  ')));
         const phoneOk = validateField(contactInput,   hintContact, false, v => v === '' || fullPhoneRegex.test(v));
         const hasItems = document.querySelectorAll('#itemsContainer .item-row').length > 0;
         const itemsValid = calculateTotal() > 0;
@@ -456,12 +474,21 @@ button:disabled {
     function setupInput(input, hint, required, customValid) {
         input.addEventListener('input', function() {
             touched[input.id] = true;
-            if (input === contactInput) input.value = input.value.replace(/[^0-9]/g, '');
+            if (input === contactInput) {
+                input.value = input.value.replace(/[^0-9]/g, '');
+            } else if (input === firstnameInput || input === lastnameInput) {
+                input.value = input.value.replace(/[^a-zA-Z ]/g, '').replace(/ +/g, ' ');
+            } else if (input === addressInput) {
+                input.value = input.value.replace(/[^a-zA-Z0-9 ,\.\(\)]/g, '').replace(/ +/g, ' ');
+            }
             validateField(input, hint, required, customValid);
             checkValid();
         });
         input.addEventListener('blur', function() {
             touched[input.id] = true;
+            if (input === firstnameInput || input === lastnameInput || input === addressInput) {
+                input.value = input.value.trim().replace(/ +/g, ' ');
+            }
             validateField(input, hint, required, customValid);
             checkValid();
         });
@@ -471,9 +498,9 @@ button:disabled {
             if (input === contactInput) {
                 text = text.replace(/[^0-9]/g, '');
             } else if (input === addressInput) {
-                text = text.split('').filter(ch => addrRegex.test(ch)).join('');
+                text = text.split('').filter(ch => /[a-zA-Z0-9 ,\.\(\)]/.test(ch)).join('').replace(/ +/g, ' ');
             } else {
-                text = text.split('').filter(ch => nameRegex.test(ch)).join('');
+                text = text.split('').filter(ch => /[a-zA-Z ]/.test(ch)).join('').replace(/ +/g, ' ');
             }
             input.value += text;
             touched[input.id] = true;
@@ -482,9 +509,9 @@ button:disabled {
         });
     }
 
-    setupInput(firstnameInput, hintFirst, true, v => nameRegex.test(v) && v.length > 0);
-    setupInput(lastnameInput,  hintLast,  true, v => nameRegex.test(v) && v.length > 0);
-    setupInput(addressInput,   hintAddr,  false, v => v === '' || addrRegex.test(v));
+    setupInput(firstnameInput, hintFirst, true, v => nameRegex.test(v) && v.length > 0 && !v.includes('  '));
+    setupInput(lastnameInput,  hintLast,  true, v => nameRegex.test(v) && v.length > 0 && !v.includes('  '));
+    setupInput(addressInput,   hintAddr,  false, v => v === '' || (addrRegex.test(v) && !v.includes('  ')));
     setupInput(contactInput,   hintContact, false, v => v === '' || fullPhoneRegex.test(v));
 
     saveBtn.disabled = true;
